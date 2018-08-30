@@ -86,6 +86,19 @@ public:
     return data + max_key_size_;
   }
 
+
+  char* get_tuple(const BlockIDT block_id, const RelOffsetT rel_offset) const {
+
+    char *data = data_blocks_.at(block_id)->get_tuple(rel_offset);
+    return data;
+  }
+
+  char* get_tuple(const OffsetT offset) const {
+
+    char *data = data_blocks_.at(offset.block_id())->get_tuple(offset.rel_offset());
+    return data;
+  }
+
   inline size_t get_max_key_size() const { return max_key_size_; }
 
   inline size_t get_max_value_size() const { return max_value_size_; }

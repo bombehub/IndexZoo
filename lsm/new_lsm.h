@@ -16,10 +16,10 @@ const uint64_t MAX_TS = std::numeric_limits<uint64_t>::max();
 const size_t WRITE_BUFFER_SIZE = 4 * 1024 * 1024;
 // const size_t MAX_FILE_SIZE = WRITE_BUFFER_SIZE * 2;
 // const size_t MAX_KEY_SPACE_COUNT = 4;
-// const size_t MAX_LEVEL_DEPTH = 10;
+const size_t MAX_LEVEL_DEPTH = 10;
 
 
-typedef void(*imm_callback)(void *data, const char *key, const size_t key_size, const char *payload, const size_t payload_size, const uint64_t timestamp);
+typedef void(*kv_callback)(void *data, const char *key, const size_t key_size, const char *payload, const size_t payload_size, const uint64_t timestamp);
 
 class ImmTable {
 
@@ -35,13 +35,13 @@ public:
       max_ts_ = timestamp;
     }
 
-    map_.insert( {key, {payload, timestamp} } );
+    container_.insert( {key, {payload, timestamp} } );
 
   }
 
   bool find(const GenericKey &key, const uint64_t timestamp, GenericKey &ret_payload) {
-    auto iter = map_.find(key);
-    if (iter != map_.end()) {
+    auto iter = container_.find(key);
+    if (iter != container_.end()) {
       ret_payload = iter->second.first;
       return true;
     } else {
@@ -49,8 +49,8 @@ public:
     }
   }
 
-  void iterate(imm_callback cb, void *data) {
-    for (auto entry : map_) {
+  void iterate(kv_callback cb, void *data) {
+    for (auto entry : container_) {
       cb(data, entry.first.raw(), entry.first.size(), entry.second.first.raw(), entry.second.first.size(), entry.second.second);
       std::cout << entry.first.size() << " " << entry.second.first.size() << " " << entry.second.second << std::endl;
     }
@@ -59,7 +59,7 @@ public:
   void reset() {
     min_ts_ = MAX_TS;
     max_ts_ = MIN_TS;
-    map_.clear();
+    container_.clear();
   }
 
   uint64_t get_min_ts() const {
@@ -75,7 +75,7 @@ private:
   uint64_t min_ts_;
   uint64_t max_ts_;
 
-  std::multimap<GenericKey, std::pair<GenericKey, uint64_t>> map_;
+  std::multimap<GenericKey, std::pair<GenericKey, uint64_t>> container_;
 
 };
 
@@ -106,18 +106,24 @@ class FileMetadata {
 public:
   FileMetadata() {}
 
-  FileMetadata(const size_t file_size, const uint64_t min_ts, const uint64_t max_ts) {
+  FileMetadata(const size_t level, const size_t file_id, const size_t file_size, const uint64_t min_ts, const uint64_t max_ts) {
+    level_ = level;
+    file_id_ = file_id;
     file_size_ = file_size;
     min_ts_ = min_ts;
     max_ts_ = max_ts;
   }
 
   FileMetadata(const FileMetadata &metadata) {
+    level_ = metadata.level_;
+    file_id_ = metadata.file_id_;
     file_size_ = metadata.file_size_;
     min_ts_ = metadata.min_ts_;
     max_ts_ = metadata.max_ts_;
   }
 
+  size_t level_;
+  size_t file_id_;
   size_t file_size_;
   uint64_t min_ts_;
   uint64_t max_ts_;
@@ -149,7 +155,7 @@ public:
     return imm_table_->find(key, timestamp, ret_payload);
   }
 
-  static void persist_callback(void *data, const char *key, const size_t key_size, const char *payload, const size_t payload_size, const uint64_t timestamp) {
+  static void persist_kv_callback(void *data, const char *key, const size_t key_size, const char *payload, const size_t payload_size, const uint64_t timestamp) {
     WriteBuffer *buffer = (WriteBuffer*)data;
     // write key_size
     memcpy(buffer->data_ + buffer->offset_, &key_size, sizeof(key_size));
@@ -177,17 +183,18 @@ public:
     next_file_id_++;
 
     // serialize imm_table_ data to write_buffer_
-    imm_table_->iterate(&LSM::persist_callback, (void*)(write_buffer_));
+    imm_table_->iterate(&LSM::persist_kv_callback, (void*)(write_buffer_));
 
     // persist write_buffer_ data to disk
     write_sst(file_id, write_buffer_->offset_, write_buffer_->data_);
 
 
-    FileMetadata metadata(write_buffer_->offset_, imm_table_->get_min_ts(), imm_table_->get_max_ts());
+    FileMetadata metadata(0, file_id, write_buffer_->offset_, imm_table_->get_min_ts(), imm_table_->get_max_ts());
   
-    assert(sst_files_.find(file_id) == sst_files_.end());
-    sst_files_[file_id] = metadata;
-    // sst_files_[file_id].file_size_ = write_buffer_->offset_;
+    assert(sst_id_idx_.find(file_id) == sst_id_idx_.end());
+    
+    sst_id_idx_[file_id] = metadata;
+    sst_level_idx_[0].push_back(metadata);
 
     imm_table_->reset();
 
@@ -195,10 +202,80 @@ public:
 
   }
 
-  void print_file(const size_t file_id) {
-    assert(sst_files_.find(file_id) != sst_files_.end());
+  typedef std::multimap<GenericKey, std::pair<GenericKey, uint64_t>> CompactionBufferT;
 
-    size_t file_size = sst_files_.at(file_id).file_size_;
+  static void compact_kv_callback(void *data, const char *key, const size_t key_size, const char *payload, const size_t payload_size, const uint64_t timestamp) {
+    CompactionBufferT *buffer = (CompactionBufferT*)data;
+    data->insert();
+
+  }
+
+  void do_compaction(const std::vector<size_t> file_ids) {
+    
+    CompactionBufferT buffer;
+    for (auto file_id : file_ids) {
+      load_file(file_id, &LSM::compact_kv_callback, (void*)(&buffer));
+    }
+  }
+
+  void load_file(const size_t file_id, kv_callback cb, void *data) {
+    assert(sst_id_idx_.find(file_id) != sst_id_idx_.end());
+
+    size_t file_size = sst_id_idx_.at(file_id).file_size_;
+
+    char *data = new char[file_size];
+    memset(data, 0, file_size);
+    read_sst(file_id, file_size, data);
+
+    size_t offset = 0;
+    while (offset < file_size) {
+
+      // read key_size
+      size_t key_size = 0;
+      memcpy(&key_size, data + offset, sizeof(key_size));
+      offset += sizeof(key_size);
+      // read payload_size
+      size_t payload_size = 0;
+      memcpy(&payload_size, data + offset, sizeof(payload_size));
+      offset += sizeof(payload_size);
+
+      // read key
+      char *key_str = new char[key_size];
+      memcpy(key_str, data + offset, key_size);
+      offset += key_size;
+      // read payload
+      char *payload_str = new char[payload_size];        
+      memcpy(payload_str, data + offset, payload_size);
+      offset += payload_size;
+
+      uint64_t timestamp = 0;
+      memcpy(&timestamp, data + offset, sizeof(uint64_t));
+      offset += sizeof(uint64_t);
+
+      cb(data, entry.first.raw(), entry.first.size(), entry.second.first.raw(), entry.second.first.size(), entry.second.second);
+
+      delete[] key_str;
+      key_str = nullptr;
+      delete[] payload_str;
+      payload_str = nullptr;
+
+    }
+
+    delete[] data;
+    data = nullptr;    
+  }
+
+
+  void print_files(const std::vector<size_t> file_ids) const {
+    for (auto file_id : file_ids) {
+      print_file(file_id);
+    }
+  }
+
+  void print_file(const size_t file_id) const {
+    assert(sst_id_idx_.find(file_id) != sst_id_idx_.end());
+
+    size_t file_size = sst_id_idx_.at(file_id).file_size_;
 
     char *data = new char[file_size];
     memset(data, 0, file_size);
@@ -277,7 +354,9 @@ private:
 
   size_t next_file_id_;
 
-  std::unordered_map<size_t, FileMetadata> sst_files_;
+  std::unordered_map<size_t, FileMetadata> sst_id_idx_;
+
+  std::vector<FileMetadata> sst_level_idx_[MAX_LEVEL_DEPTH];
 
 };
 

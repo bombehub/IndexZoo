@@ -19,7 +19,7 @@ const size_t WRITE_BUFFER_SIZE = 4 * 1024 * 1024;
 // const size_t MAX_LEVEL_DEPTH = 10;
 
 
-typedef int(*imm_callback)(void *data, const unsigned char *key, const size_t key_size, const unsigned char *payload, const size_t payload_size, void *data);
+typedef void(*imm_callback)(void *data, const char *key, const size_t key_size, const char *payload, const size_t payload_size, const uint64_t timestamp);
 
 class ImmTable {
 
@@ -51,8 +51,23 @@ public:
 
   void iterate(imm_callback cb, void *data) {
     for (auto entry : map_) {
-      imm_callback(entry.first.raw(), entry.first.size(), entry.second.first.raw(), entry.second.first.size(), entry.second.second, data);
+      cb(data, entry.first.raw(), entry.first.size(), entry.second.first.raw(), entry.second.first.size(), entry.second.second);
+      std::cout << entry.first.size() << " " << entry.second.first.size() << " " << entry.second.second << std::endl;
     }
+  }
+
+  void reset() {
+    min_ts_ = MAX_TS;
+    max_ts_ = MIN_TS;
+    map_.clear();
+  }
+
+  uint64_t get_min_ts() const {
+    return min_ts_;
+  }
+
+  uint64_t get_max_ts() const {
+    return max_ts_;
   }
 
 private:
@@ -67,11 +82,10 @@ private:
 class WriteBuffer {
 
 public:
-  WriteBuffer(const size_t key_size, const size_t payload_size) {
+  WriteBuffer() {
     data_ = new char[WRITE_BUFFER_SIZE];
-    entry_size_ = key_size + payload_size + sizeof(uint64_t);
-    entry_count_ = 0;
-    max_entry_count_ = WRITE_BUFFER_SIZE / entry_size_;
+    memset(data_, 0, WRITE_BUFFER_SIZE);
+    offset_ = 0;
   }
 
   ~WriteBuffer() {
@@ -79,25 +93,44 @@ public:
     data_ = nullptr;
   }
 
-  void reset_offset() { 
-    entry_count_ = 0;
+  void reset() { 
+    memset(data_, 0, WRITE_BUFFER_SIZE);
+    offset_ = 0;
   }
 
-private:
   char *data_;
-  size_t entry_size_;
-  size_t entry_count_;
-  size_t max_entry_count_;
+  size_t offset_;
+};
+
+class FileMetadata {
+public:
+  FileMetadata() {}
+
+  FileMetadata(const size_t file_size, const uint64_t min_ts, const uint64_t max_ts) {
+    file_size_ = file_size;
+    min_ts_ = min_ts;
+    max_ts_ = max_ts;
+  }
+
+  FileMetadata(const FileMetadata &metadata) {
+    file_size_ = metadata.file_size_;
+    min_ts_ = metadata.min_ts_;
+    max_ts_ = metadata.max_ts_;
+  }
+
+  size_t file_size_;
+  uint64_t min_ts_;
+  uint64_t max_ts_;
 };
 
 
 class LSM {
 public:
-  LSM(const size_t key_size, const size_t payload_size) {
+  LSM() {
     imm_table_ = new ImmTable();
-    next_file_id_ = 0;
+    write_buffer_ = new WriteBuffer();
 
-    write_buffer_ = new WriteBuffer(key_size, payload_size);
+    next_file_id_ = 0;
   }
 
   ~LSM() {
@@ -116,22 +149,26 @@ public:
     return imm_table_->find(key, timestamp, ret_payload);
   }
 
-  static void persist_callback(void *data, const unsigned char *key, const size_t key_size, const unsigned char *payload, const size_t payload_size, void *value) {
+  static void persist_callback(void *data, const char *key, const size_t key_size, const char *payload, const size_t payload_size, const uint64_t timestamp) {
     WriteBuffer *buffer = (WriteBuffer*)data;
-    // Slice *s = (Slice*)value;
-    // uint32_t value_len = s->size_;
-    // write key_len
-    // memcpy(buffer->data_ + buffer->offset_, &key_len, sizeof(key_len));
-    // buffer->offset_ += sizeof(key_len);
-    // // write value_len
-    // memcpy(buffer->data_ + buffer->offset_, &value_len, sizeof(value_len));
-    // buffer->offset_ += sizeof(value_len);
-    // // write key
-    // memcpy(buffer->data_ + buffer->offset_, key, key_len);
-    // buffer->offset_ += key_len;
-    // // write value
-    // memcpy(buffer->data_ + buffer->offset_, s->data_, value_len);
-    // buffer->offset_ += value_len;
+    // write key_size
+    memcpy(buffer->data_ + buffer->offset_, &key_size, sizeof(key_size));
+    buffer->offset_ += sizeof(key_size);
+    // write payload_size
+    memcpy(buffer->data_ + buffer->offset_, &payload_size, sizeof(payload_size));
+    buffer->offset_ += sizeof(payload_size);
+    // write key
+    memcpy(buffer->data_ + buffer->offset_, key, key_size);
+    buffer->offset_ += key_size;
+    // write payload
+    memcpy(buffer->data_ + buffer->offset_, payload, payload_size);
+    buffer->offset_ += payload_size;
+    // write timestamp
+    memcpy(buffer->data_ + buffer->offset_, &timestamp, sizeof(uint64_t));
+    buffer->offset_ += sizeof(uint64_t);
+
+    // if exceeds max write buffer size, then flush.
+
   }
 
   void persist_imm_table() {
@@ -139,8 +176,74 @@ public:
     size_t file_id = next_file_id_;
     next_file_id_++;
 
-    imm_table_->iterate(&LSM::persist_callback, (void*)(&write_buffer_));
+    // serialize imm_table_ data to write_buffer_
+    imm_table_->iterate(&LSM::persist_callback, (void*)(write_buffer_));
+
+    // persist write_buffer_ data to disk
+    write_sst(file_id, write_buffer_->offset_, write_buffer_->data_);
+
+
+    FileMetadata metadata(write_buffer_->offset_, imm_table_->get_min_ts(), imm_table_->get_max_ts());
+  
+    assert(sst_files_.find(file_id) == sst_files_.end());
+    sst_files_[file_id] = metadata;
+    // sst_files_[file_id].file_size_ = write_buffer_->offset_;
+
+    imm_table_->reset();
+
+    write_buffer_->reset();
+
   }
+
+  void print_file(const size_t file_id) {
+    assert(sst_files_.find(file_id) != sst_files_.end());
+
+    size_t file_size = sst_files_.at(file_id).file_size_;
+
+    char *data = new char[file_size];
+    memset(data, 0, file_size);
+    read_sst(file_id, file_size, data);
+
+    size_t offset = 0;
+    while (offset < file_size) {
+
+      // read key_size
+      size_t key_size = 0;
+      memcpy(&key_size, data + offset, sizeof(key_size));
+      offset += sizeof(key_size);
+      // read payload_size
+      size_t payload_size = 0;
+      memcpy(&payload_size, data + offset, sizeof(payload_size));
+      offset += sizeof(payload_size);
+
+      // read key
+      char *key_str = new char[key_size];
+      memcpy(key_str, data + offset, key_size);
+      offset += key_size;
+      // read payload
+      char *payload_str = new char[payload_size];        
+      memcpy(payload_str, data + offset, payload_size);
+      offset += payload_size;
+
+      uint64_t timestamp = 0;
+      memcpy(&timestamp, data + offset, sizeof(uint64_t));
+      offset += sizeof(uint64_t);
+
+      std::cout << "timestamp = " << timestamp << std::endl;
+
+      delete[] key_str;
+      key_str = nullptr;
+      delete[] payload_str;
+      payload_str = nullptr;
+
+    }
+
+    delete[] data;
+    data = nullptr;
+
+  }
+
+private:
 
   void write_sst(const size_t file_id, const size_t size, const char *data) {
     std::string filename = get_filename(file_id);
@@ -170,9 +273,11 @@ public:
 private:
   ImmTable *imm_table_;
 
+  WriteBuffer *write_buffer_;
+
   size_t next_file_id_;
 
-  WriteBuffer *write_buffer_;
+  std::unordered_map<size_t, FileMetadata> sst_files_;
 
 };
 

@@ -27,8 +27,6 @@ struct DataEntry {
   uint64_t timestamp_;
 };
 
-
-
 void test(const size_t key_count) {
   
   FastRandom rand;
@@ -36,13 +34,13 @@ void test(const size_t key_count) {
   size_t key_size = 8;
   size_t payload_size = 100;
 
-  LSM storage(8, 100);
+  LSM storage;
 
   std::vector<DataEntry> kv_logs;
   uint64_t ts_counter = 0;
   for (size_t i = 0; i < key_count; ++i) {
     std::string key;
-    rand.next_string(key_size, key);
+    rand.next_readable_string(key_size, key);
     std::string payload;
     rand.next_readable_string(payload_size, payload);
     uint64_t timestamp = ts_counter;
@@ -65,6 +63,9 @@ void test(const size_t key_count) {
     }
   }
   std::cout << "key found = " << key_found << std::endl;
+
+  storage.persist_imm_table();
+  storage.print_file(0);
 
 }
 

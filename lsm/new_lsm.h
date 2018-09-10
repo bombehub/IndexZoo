@@ -206,7 +206,7 @@ public:
 
   static void compact_kv_callback(void *data, const char *key, const size_t key_size, const char *payload, const size_t payload_size, const uint64_t timestamp) {
     CompactionBufferT *buffer = (CompactionBufferT*)data;
-    data->insert();
+    // data->insert();
 
   }
 
@@ -219,50 +219,50 @@ public:
   }
 
   void load_file(const size_t file_id, kv_callback cb, void *data) {
-    assert(sst_id_idx_.find(file_id) != sst_id_idx_.end());
+    // assert(sst_id_idx_.find(file_id) != sst_id_idx_.end());
 
-    size_t file_size = sst_id_idx_.at(file_id).file_size_;
+    // size_t file_size = sst_id_idx_.at(file_id).file_size_;
 
-    char *data = new char[file_size];
-    memset(data, 0, file_size);
-    read_sst(file_id, file_size, data);
+    // char *data = new char[file_size];
+    // memset(data, 0, file_size);
+    // read_sst(file_id, file_size, data);
 
-    size_t offset = 0;
-    while (offset < file_size) {
+    // size_t offset = 0;
+    // while (offset < file_size) {
 
-      // read key_size
-      size_t key_size = 0;
-      memcpy(&key_size, data + offset, sizeof(key_size));
-      offset += sizeof(key_size);
-      // read payload_size
-      size_t payload_size = 0;
-      memcpy(&payload_size, data + offset, sizeof(payload_size));
-      offset += sizeof(payload_size);
+    //   // read key_size
+    //   size_t key_size = 0;
+    //   memcpy(&key_size, data + offset, sizeof(key_size));
+    //   offset += sizeof(key_size);
+    //   // read payload_size
+    //   size_t payload_size = 0;
+    //   memcpy(&payload_size, data + offset, sizeof(payload_size));
+    //   offset += sizeof(payload_size);
 
-      // read key
-      char *key_str = new char[key_size];
-      memcpy(key_str, data + offset, key_size);
-      offset += key_size;
-      // read payload
-      char *payload_str = new char[payload_size];        
-      memcpy(payload_str, data + offset, payload_size);
-      offset += payload_size;
+    //   // read key
+    //   char *key_str = new char[key_size];
+    //   memcpy(key_str, data + offset, key_size);
+    //   offset += key_size;
+    //   // read payload
+    //   char *payload_str = new char[payload_size];        
+    //   memcpy(payload_str, data + offset, payload_size);
+    //   offset += payload_size;
 
-      uint64_t timestamp = 0;
-      memcpy(&timestamp, data + offset, sizeof(uint64_t));
-      offset += sizeof(uint64_t);
+    //   uint64_t timestamp = 0;
+    //   memcpy(&timestamp, data + offset, sizeof(uint64_t));
+    //   offset += sizeof(uint64_t);
 
-      cb(data, entry.first.raw(), entry.first.size(), entry.second.first.raw(), entry.second.first.size(), entry.second.second);
+    //   cb(data, entry.first.raw(), entry.first.size(), entry.second.first.raw(), entry.second.first.size(), entry.second.second);
 
-      delete[] key_str;
-      key_str = nullptr;
-      delete[] payload_str;
-      payload_str = nullptr;
+    //   delete[] key_str;
+    //   key_str = nullptr;
+    //   delete[] payload_str;
+    //   payload_str = nullptr;
 
-    }
+    // }
 
-    delete[] data;
-    data = nullptr;    
+    // delete[] data;
+    // data = nullptr;
   }
 
 

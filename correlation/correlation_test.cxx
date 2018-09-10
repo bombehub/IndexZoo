@@ -79,7 +79,6 @@ void test() {
   tuple_schema.add_attr(sizeof(uint64_t));
   tuple_schema.add_attr(sizeof(uint64_t));
 
-
   IndexType index_type = IndexType::D_ST_StxBtree;
 
   size_t key_size = sizeof(uint64_t) * 3;
@@ -155,8 +154,51 @@ void test() {
     std::cout << "======================" << std::endl;
 
   }
+}
 
+void test1() {
+  TupleSchema tuple_schema;
+  // add five uint64_t attributes
+  tuple_schema.add_attr(sizeof(uint64_t));
+  tuple_schema.add_attr(sizeof(uint64_t));
+  tuple_schema.add_attr(sizeof(uint64_t));
+  tuple_schema.add_attr(sizeof(uint64_t));
 
+  IndexType index_type = IndexType::D_ST_StxBtree;
+
+  size_t key_size = sizeof(uint64_t);
+  size_t value_size = sizeof(uint64_t) * 3;
+  std::unique_ptr<GenericDataTable> data_table(
+    new GenericDataTable(key_size, value_size));
+  std::unique_ptr<BaseGenericIndex> data_index(
+    create_generic_index(index_type, data_table.get()));
+
+  data_index->prepare_threads(1);
+  data_index->register_thread(0);
+
+  FastRandom rand_gen;
+
+  size_t tuple_count = 1000;
+
+  GenericKey tuple_key(key_size);
+  GenericKey tuple_value(value_size);
+
+  for (size_t tuple_id = 0; tuple_id < tuple_count; ++tuple_id) {
+    uint64_t attr0 = rand_gen.next<uint64_t>(); // primary key
+    uint64_t attr1 = tuple_id;
+    uint64_t attr2 = tuple_id * tuple_id;
+    uint64_t attr3 = rand_gen.next<uint64_t>();
+  }
+
+  memcpy(tuple_key.raw(), (char*)(&attr0), sizeof(uint64_t));
+
+  memcpy(tuple_value.raw(), (char*)(&attr1), sizeof(uint64_t));
+  memcpy(tuple_value.raw() + sizeof(uint64_t), (char*)(&attr2), sizeof(uint64_t));
+  memcpy(tuple_value.raw() + sizeof(uint64_t) * 2, (char*)(&attr3), sizeof(uint64_t));
+
+  OffsetT offset = data_table->insert_tuple(tuple_key.raw(), tuple_key.size(), tuple_value.raw(), tuple_value.size());
+
+  data_index->insert(tuple_key, offset.raw_data());
 }
 
 

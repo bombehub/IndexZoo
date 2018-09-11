@@ -12,30 +12,11 @@
 
 #include "index_all.h"
 
+#include "btree_index.h"
+#include "approx_correlation_index.h"
 #include "correlation_index.h"
 #include "tuple_schema.h"
 
-
-class BTreeIndex {
-public:
-
-  BTreeIndex() {}
-  ~BTreeIndex() {}
-
-  void insert(const uint64_t key, const uint64_t value) {
-    container_.insert( {key, value} );
-  }
-
-  void lookup(const uint64_t key, std::vector<uint64_t> &ret_keys) {
-    auto ret = container_.equal_range(key);
-    for (auto it = ret.first; it != ret.second; ++it) {
-      ret_keys.push_back(it->second);
-    }    
-  }
-
-private:
-  stx::btree_multimap<uint64_t, uint64_t> container_;
-};
 
 uint64_t primary_index_lookup(TupleSchema &tuple_schema, GenericDataTable *data_table, BTreeIndex *primary_index, const std::vector<uint64_t> &keys) {
 
@@ -151,11 +132,61 @@ uint64_t correlation_index_lookup(TupleSchema &tuple_schema, GenericDataTable *d
   return sum;
 }
 
+
+uint64_t approx_correlation_index_lookup(TupleSchema &tuple_schema, GenericDataTable *data_table, BTreeIndex *primary_index, BTreeIndex *base_secondary_index, ApproxCorrelationIndex *approx_correlation_index, const std::vector<uint64_t> &keys) {
+
+
+  size_t tuple_count = keys.size();
+  size_t query_count = tuple_count;
+
+  uint64_t sum = 0;
+
+  FastRandom rand_gen;
+  for (size_t query_id = 0; query_id < query_count; ++query_id) {
+
+    uint64_t key = keys.at(rand_gen.next<uint64_t>() % tuple_count);
+
+    uint64_t lhs_host_key = 0;
+    uint64_t rhs_host_key = 0;
+    // found host key range
+    approx_correlation_index->lookup(key, lhs_host_key, rhs_host_key);
+
+    std::vector<uint64_t> pkeys;
+    base_secondary_index->range_lookup(lhs_host_key, rhs_host_key, pkeys);
+
+    // found primary keys
+    for (auto pkey : pkeys) {
+
+      std::vector<Uint64> offsets;
+
+      primary_index->lookup(pkey, offsets);
+
+      for (auto offset : offsets) {
+        char *value = data_table->get_tuple(offset);
+        
+        size_t attr2_offset = tuple_schema.get_attr_offset(2);
+        uint64_t attr2_ret = *(uint64_t*)(value + attr2_offset);
+
+        if (attr2_ret == key) {
+          size_t attr3_offset = tuple_schema.get_attr_offset(3);
+          uint64_t attr3_ret = *(uint64_t*)(value + attr3_offset);
+
+          sum += attr3_ret;
+        }
+      }
+    }
+
+  }
+
+  return sum;
+}
+
 enum AccessType {
   PrimaryIndexAccess = 0,
   BaseSecondaryIndexAccess,
   SecondaryIndexAccess,
-  CorrelationIndexAccess
+  CorrelationIndexAccess,
+  ApproxCorrelationIndexAccess,
 };
 
 void test(const size_t tuple_count, const AccessType access_type, const size_t param) {
@@ -179,11 +210,14 @@ void test(const size_t tuple_count, const AccessType access_type, const size_t p
 
   std::unique_ptr<BTreeIndex> secondary_index;
   std::unique_ptr<CorrelationIndex> correlation_index;
+  std::unique_ptr<ApproxCorrelationIndex> approx_correlation_index;
 
   if (access_type == SecondaryIndexAccess) {
     secondary_index.reset(new BTreeIndex());
   } else if (access_type == CorrelationIndexAccess) {
     correlation_index.reset(new CorrelationIndex(param));
+  } else if (access_type == ApproxCorrelationIndexAccess) {
+    approx_correlation_index.reset(new ApproxCorrelationIndex(param));
   }
 
   FastRandom rand_gen;
@@ -198,7 +232,7 @@ void test(const size_t tuple_count, const AccessType access_type, const size_t p
   for (size_t tuple_id = 0; tuple_id < tuple_count; ++tuple_id) {
     
     uint64_t attr0 = rand_gen.next<uint64_t>(); // primary key
-    uint64_t attr1 = tuple_id * tuple_id;
+    uint64_t attr1 = tuple_id;
     uint64_t attr2 = tuple_id;
     uint64_t attr3 = rand_gen.next<uint64_t>() % 100;
 
@@ -230,6 +264,8 @@ void test(const size_t tuple_count, const AccessType access_type, const size_t p
 
   if (access_type == CorrelationIndexAccess) {
     correlation_index->construct(attr2s, attr1s);
+  } else if (access_type == ApproxCorrelationIndexAccess) {
+    approx_correlation_index->construct(attr2s, attr1s);
   }
 
   TimeMeasurer timer;
@@ -248,6 +284,9 @@ void test(const size_t tuple_count, const AccessType access_type, const size_t p
     break;
     case CorrelationIndexAccess:
     sum = correlation_index_lookup(tuple_schema, data_table.get(), primary_index.get(), base_secondary_index.get(), correlation_index.get(), attr2s);
+    break;
+    case ApproxCorrelationIndexAccess:
+    sum = approx_correlation_index_lookup(tuple_schema, data_table.get(), primary_index.get(), base_secondary_index.get(), approx_correlation_index.get(), attr2s);
     break;
     default:
     break;
@@ -270,7 +309,7 @@ int main(int argc, char *argv[]) {
 
   size_t tuple_count = atoi(argv[1]);
   AccessType access_type = AccessType(atoi(argv[2]));
-  size_t param = 1;
+  size_t param = 2;
   if (argc == 4) {
     param = atoi(argv[3]);
   }

@@ -103,7 +103,7 @@ uint64_t secondary_index_lookup(TupleSchema &tuple_schema, GenericDataTable *dat
 
 }
 
-uint64_t correlation_index_lookup(TupleSchema &tuple_schema, GenericDataTable *data_table, BTreeIndex *primary_index, BTreeIndex *secondary_index, BaseCorrelationIndex *correlation_index, const std::vector<uint64_t> &keys) {
+uint64_t correlation_index_lookup(TupleSchema &tuple_schema, GenericDataTable *data_table, BTreeIndex *primary_index, BTreeIndex *base_secondary_index, CorrelationIndex *correlation_index, const std::vector<uint64_t> &keys) {
 
   size_t tuple_count = keys.size();
   size_t query_count = tuple_count;
@@ -122,7 +122,7 @@ uint64_t correlation_index_lookup(TupleSchema &tuple_schema, GenericDataTable *d
     for (auto host_key : host_keys) {
       std::vector<uint64_t> pkeys;
 
-      secondary_index->lookup(host_key, pkeys);
+      base_secondary_index->lookup(host_key, pkeys);
 
       // found primary keys
       for (auto pkey : pkeys) {
@@ -153,11 +153,12 @@ uint64_t correlation_index_lookup(TupleSchema &tuple_schema, GenericDataTable *d
 
 enum AccessType {
   PrimaryIndexAccess = 0,
+  BaseSecondaryIndexAccess,
   SecondaryIndexAccess,
   CorrelationIndexAccess
 };
 
-void test(const size_t tuple_count, const AccessType type, const size_t param) {
+void test(const size_t tuple_count, const AccessType access_type, const size_t param) {
 
   TupleSchema tuple_schema;
   // add five uint64_t attributes
@@ -172,9 +173,16 @@ void test(const size_t tuple_count, const AccessType type, const size_t param) {
     new GenericDataTable(key_size, value_size));
   // primary index
   std::unique_ptr<BTreeIndex> primary_index(new BTreeIndex());
-  std::unique_ptr<BTreeIndex> secondary_index(new BTreeIndex());
-  std::unique_ptr<BaseCorrelationIndex> correlation_index(
-    new InterpolationCorrelationIndex(param));
+  std::unique_ptr<BTreeIndex> base_secondary_index(new BTreeIndex());
+
+  std::unique_ptr<BTreeIndex> secondary_index;
+  std::unique_ptr<CorrelationIndex> correlation_index;
+
+  if (access_type == SecondaryIndexAccess) {
+    secondary_index.reset(new BTreeIndex());
+  } else if (access_type == CorrelationIndexAccess) {
+    correlation_index.reset(new CorrelationIndex(param));
+  }
 
   FastRandom rand_gen;
 
@@ -186,6 +194,7 @@ void test(const size_t tuple_count, const AccessType type, const size_t param) {
   std::vector<uint64_t> attr2s;
 
   for (size_t tuple_id = 0; tuple_id < tuple_count; ++tuple_id) {
+    
     uint64_t attr0 = rand_gen.next<uint64_t>(); // primary key
     uint64_t attr1 = tuple_id * tuple_id;
     uint64_t attr2 = tuple_id;
@@ -207,26 +216,36 @@ void test(const size_t tuple_count, const AccessType type, const size_t param) {
     // update primary index
     primary_index->insert(attr0, offset.raw_data());
 
-    // update secondary indexes
-    secondary_index->insert(attr1, attr0);
+    // update base secondary index
+    base_secondary_index->insert(attr1, attr0);
+
+    if (access_type == SecondaryIndexAccess) {
+      // update secondary index
+      secondary_index->insert(attr2, attr0);
+    }
 
   }
 
-  correlation_index->construct(attr2s, attr1s);
+  if (access_type == CorrelationIndexAccess) {
+    correlation_index->construct(attr2s, attr1s);
+  }
 
   TimeMeasurer timer;
   timer.tic();
 
   uint64_t sum = 0;
-  switch (type) {
+  switch (access_type) {
     case PrimaryIndexAccess:
     sum = primary_index_lookup(tuple_schema, data_table.get(), primary_index.get(), attr0s);
     break;
+    case BaseSecondaryIndexAccess:
+    sum = secondary_index_lookup(tuple_schema, data_table.get(), primary_index.get(), base_secondary_index.get(), attr1s);
+    break;
     case SecondaryIndexAccess:
-    sum = secondary_index_lookup(tuple_schema, data_table.get(), primary_index.get(), secondary_index.get(), attr1s);
+    sum = secondary_index_lookup(tuple_schema, data_table.get(), primary_index.get(), secondary_index.get(), attr2s);
     break;
     case CorrelationIndexAccess:
-    sum = correlation_index_lookup(tuple_schema, data_table.get(), primary_index.get(), secondary_index.get(), correlation_index.get(), attr2s);
+    sum = correlation_index_lookup(tuple_schema, data_table.get(), primary_index.get(), base_secondary_index.get(), correlation_index.get(), attr2s);
     break;
     default:
     break;
@@ -251,5 +270,8 @@ int main(int argc, char *argv[]) {
     param = atoi(argv[3]);
   }
 
+  double init_mem_size = get_memory_mb();
   test(tuple_count, access_type, param);
+  double total_mem_size = get_memory_mb();
+  std::cout << "mem size: " << init_mem_size << " mb, " << total_mem_size << " mb." << std::endl;
 }

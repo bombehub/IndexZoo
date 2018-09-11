@@ -4,44 +4,7 @@
 #include <map>
 
 
-class BaseCorrelationIndex {
-public:
-  BaseCorrelationIndex() {}
-  virtual ~BaseCorrelationIndex() {}
-
-  virtual void construct(std::vector<uint64_t> &target_column, std::vector<uint64_t> &host_column) = 0;
-
-  virtual void lookup(const uint64_t key, std::vector<uint64_t> &ret_keys) = 0;
-};
-
-
-
-class FullCorrelationIndex : public BaseCorrelationIndex {
-public:
-  FullCorrelationIndex() {}
-  virtual ~FullCorrelationIndex() {}
-
-  virtual void construct(std::vector<uint64_t> &target_column, std::vector<uint64_t> &host_column) final {
-    assert(target_column.size() == host_column.size());
-
-    for (size_t i = 0; i < target_column.size(); ++i) {
-      corr_index_.insert( { target_column.at(i), host_column.at(i) } );
-    }
-  }
-
-  virtual void lookup(const uint64_t key, std::vector<uint64_t> &ret_keys) final {
-    auto ret = corr_index_.equal_range(key);
-    for (auto it = ret.first; it != ret.second; ++it) {
-      ret_keys.push_back(it->second);
-    }
-  }
-
-private:
-  std::multimap<uint64_t, uint64_t> corr_index_;
-
-};
-
-class InterpolationCorrelationIndex : public BaseCorrelationIndex {
+class CorrelationIndex {
 
   struct AttributePair {
     AttributePair() : target_(0), host_(0) {}
@@ -86,7 +49,7 @@ class InterpolationCorrelationIndex : public BaseCorrelationIndex {
   };
 
 public:
-  InterpolationCorrelationIndex(const size_t num_segments = 1) {
+  CorrelationIndex(const size_t num_segments = 1) {
 
     ASSERT(num_segments >= 1, "must have at least one segment");
 
@@ -102,7 +65,7 @@ public:
 
   }
 
-  virtual ~InterpolationCorrelationIndex() {
+  virtual ~CorrelationIndex() {
 
     delete[] segment_key_boundaries_;
     segment_key_boundaries_ = nullptr;

@@ -7,15 +7,15 @@
 class CorrelationIndex {
 
   struct AttributePair {
-    AttributePair() : target_(0), host_(0) {}
-    AttributePair(const uint64_t target, const uint64_t host) : target_(target), host_(host) {}
+    AttributePair() : guest_(0), host_(0) {}
+    AttributePair(const uint64_t target, const uint64_t host) : guest_(target), host_(host) {}
 
-    uint64_t target_;
+    uint64_t guest_;
     uint64_t host_;
   };
 
   static bool compare_func(AttributePair &lhs, AttributePair &rhs) {
-    return lhs.target_ < rhs.target_;
+    return lhs.guest_ < rhs.guest_;
   }
 
   struct Stats {
@@ -65,7 +65,7 @@ public:
 
   }
 
-  virtual ~CorrelationIndex() {
+  ~CorrelationIndex() {
 
     delete[] container_;
     container_ = nullptr;
@@ -81,7 +81,7 @@ public:
 
   }
 
-  virtual void lookup(const uint64_t key, std::vector<uint64_t> &ret_keys) final {
+  void lookup(const uint64_t key, std::vector<uint64_t> &ret_keys) {
 
     stats_.increment_find_op_counter();
 
@@ -143,7 +143,7 @@ public:
     int64_t origin_guess = guess;
     
     // if the guess is correct
-    if (this->container_[guess].target_ == key) {
+    if (this->container_[guess].guest_ == key) {
 
       stats_.measure_find_op_guess_distance(origin_guess, guess);
 
@@ -153,7 +153,7 @@ public:
       int64_t guess_lhs = guess - 1;
       while (guess_lhs >= 0) {
 
-        if (this->container_[guess_lhs].target_ == key) {
+        if (this->container_[guess_lhs].guest_ == key) {
           ret_keys.push_back(this->container_[guess_lhs].host_);
           guess_lhs -= 1;
         } else {
@@ -164,7 +164,7 @@ public:
       int64_t guess_rhs = guess + 1;
       while (guess_rhs <= this->size_ - 1) {
 
-        if (this->container_[guess_rhs].target_ == key) {
+        if (this->container_[guess_rhs].guest_ == key) {
           ret_keys.push_back(this->container_[guess_rhs].host_);
           guess_rhs += 1;
         } else {
@@ -173,15 +173,15 @@ public:
       }
     }
     // if the guess is larger than the key
-    else if (this->container_[guess].target_ > key) {
+    else if (this->container_[guess].guest_ > key) {
       // move left
       guess -= 1;
       while (guess >= 0) {
 
-        if (this->container_[guess].target_ < key) {
+        if (this->container_[guess].guest_ < key) {
           break;
         }
-        else if (this->container_[guess].target_ > key) {
+        else if (this->container_[guess].guest_ > key) {
           guess -= 1;
           continue;
         } 
@@ -201,10 +201,10 @@ public:
       guess += 1;
       while (guess < this->size_ - 1) {
 
-        if (this->container_[guess].target_ > key) {
+        if (this->container_[guess].guest_ > key) {
           break;
         }
-        else if (this->container_[guess].target_ < key) {
+        else if (this->container_[guess].guest_ < key) {
           guess += 1;
           continue;
         }
@@ -221,7 +221,7 @@ public:
     return;
   }
 
-  virtual void lookup_range(const uint64_t &lhs_key, const uint64_t &rhs_key, std::vector<uint64_t> &ret_keys) final {
+  void lookup_range(const uint64_t &lhs_key, const uint64_t &rhs_key, std::vector<uint64_t> &ret_keys) {
 
     if (lhs_key > rhs_key) { return; }
 
@@ -258,32 +258,34 @@ public:
   }
 
 
-  virtual void construct(std::vector<uint64_t> &target_column, std::vector<uint64_t> &host_column) final {
+  void construct(std::vector<uint64_t> &guest_column, std::vector<uint64_t> &host_column) {
 
-    assert(target_column.size() == host_column.size());
+    assert(guest_column.size() == host_column.size());
 
-    size_ = target_column.size();
+    size_ = guest_column.size();
 
     container_ = new AttributePair[size_];
 
-    for (size_t i = 0; i < target_column.size(); ++i) {
-      container_[i].target_ = target_column.at(i);
+    for (size_t i = 0; i < guest_column.size(); ++i) {
+      container_[i].guest_ = guest_column.at(i);
       container_[i].host_ = host_column.at(i);
     }
 
+    // sort data
     std::sort(container_, container_ + size_, compare_func);
 
-    key_min_ = this->container_[0].target_; // min value
-    key_max_ = this->container_[this->size_ - 1].target_; // max value
-
-    segment_key_boundaries_[0] = key_min_;
-    segment_key_boundaries_[num_segments_] = key_max_;
+    key_min_ = this->container_[0].guest_; // min value
+    key_max_ = this->container_[this->size_ - 1].guest_; // max value
 
     uint64_t key_range = key_max_ - key_min_;
+    // key range size for each segment
     uint64_t segment_key_range = key_range / num_segments_;
 
+    // assign key boundaries
+    segment_key_boundaries_[0] = key_min_;
+    segment_key_boundaries_[num_segments_] = key_max_;
     for (size_t i = 1; i < num_segments_; ++i) {
-      segment_key_boundaries_[i] = this->container_[0].target_ + segment_key_range * i;
+      segment_key_boundaries_[i] = this->container_[0].guest_ + segment_key_range * i;
     }
 
     size_t current_offset = 0;
@@ -292,7 +294,7 @@ public:
 
     for (size_t i = 0; i < num_segments_ - 1; ++i) {
       // scan the entire table to find offset boundaries
-      while (this->container_[current_offset].target_ < segment_key_boundaries_[i + 1]) {
+      while (this->container_[current_offset].guest_ < segment_key_boundaries_[i + 1]) {
         ++segment_sizes_[i];
         ++current_offset;
       }
@@ -303,7 +305,7 @@ public:
 
   }
 
-  virtual void print() const final {
+  void print() const {
 
     std::cout << "aggregated guess distance = " << stats_.find_op_guess_distance_ << std::endl;
 
@@ -357,10 +359,10 @@ private:
       guess = this->size_ - 1;
     }
 
-    if (this->container_[guess].target_ >= lower_key) {
+    if (this->container_[guess].guest_ >= lower_key) {
       // move left
       while (guess - 1 >= 0) {
-        if (this->container_[guess - 1].target_ >= lower_key) {
+        if (this->container_[guess - 1].guest_ >= lower_key) {
           --guess;
         } else {
           return guess;
@@ -372,7 +374,7 @@ private:
       // move right
       ++guess;
       while (guess < this->size_) {
-        if (this->container_[guess].target_ < lower_key) {
+        if (this->container_[guess].guest_ < lower_key) {
           ++guess;
         } else {
           return guess;
@@ -427,10 +429,10 @@ private:
       guess = this->size_ - 1;
     }
 
-    if (this->container_[guess].target_ <= upper_key) {
+    if (this->container_[guess].guest_ <= upper_key) {
       // move right
       while (guess +1 <= this->size_ - 1) {
-        if (this->container_[guess + 1].target_ <= upper_key) {
+        if (this->container_[guess + 1].guest_ <= upper_key) {
           ++guess;
         } else {
           return guess;
@@ -442,7 +444,7 @@ private:
       // move left
       --guess;
       while (guess > 0) {
-        if (this->container_[guess].target_ > upper_key) {
+        if (this->container_[guess].guest_ > upper_key) {
           --guess;
         } else {
           return guess;
@@ -451,8 +453,6 @@ private:
       ASSERT(false, "shouldn't touch this line of code");
       return guess;
     }
-
-
   }
 
 

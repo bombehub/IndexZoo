@@ -160,6 +160,8 @@ enum AccessType {
 
 void test(const size_t tuple_count, const AccessType access_type, const size_t param) {
 
+  double init_mem_size = get_memory_mb();
+
   TupleSchema tuple_schema;
   // add five uint64_t attributes
   tuple_schema.add_attr(sizeof(uint64_t));
@@ -254,6 +256,9 @@ void test(const size_t tuple_count, const AccessType access_type, const size_t p
   timer.toc();
   std::cout << "elapsed time = " << timer.time_us() << " us" << std::endl;
   std::cout << "sum = " << sum << std::endl;
+  
+  double total_mem_size = get_memory_mb();
+  std::cout << "mem size: " << init_mem_size << " mb, " << total_mem_size << " mb." << std::endl;
 }
 
 
@@ -269,9 +274,5 @@ int main(int argc, char *argv[]) {
   if (argc == 4) {
     param = atoi(argv[3]);
   }
-
-  double init_mem_size = get_memory_mb();
   test(tuple_count, access_type, param);
-  double total_mem_size = get_memory_mb();
-  std::cout << "mem size: " << init_mem_size << " mb, " << total_mem_size << " mb." << std::endl;
 }

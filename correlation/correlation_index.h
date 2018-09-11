@@ -67,6 +67,9 @@ public:
 
   virtual ~CorrelationIndex() {
 
+    delete[] container_;
+    container_ = nullptr;
+
     delete[] segment_key_boundaries_;
     segment_key_boundaries_ = nullptr;
 

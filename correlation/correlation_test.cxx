@@ -135,7 +135,6 @@ uint64_t correlation_index_lookup(TupleSchema &tuple_schema, GenericDataTable *d
 
 uint64_t approx_correlation_index_lookup(TupleSchema &tuple_schema, GenericDataTable *data_table, BTreeIndex *primary_index, BTreeIndex *base_secondary_index, ApproxCorrelationIndex *approx_correlation_index, const std::vector<uint64_t> &keys) {
 
-
   size_t tuple_count = keys.size();
   size_t query_count = tuple_count;
 
@@ -232,8 +231,8 @@ void test(const size_t tuple_count, const AccessType access_type, const size_t p
   for (size_t tuple_id = 0; tuple_id < tuple_count; ++tuple_id) {
     
     uint64_t attr0 = rand_gen.next<uint64_t>(); // primary key
-    uint64_t attr1 = tuple_id;
-    uint64_t attr2 = tuple_id;
+    uint64_t attr1 = tuple_id * 1.1;
+    uint64_t attr2 = tuple_id * 1.2;
     uint64_t attr3 = rand_gen.next<uint64_t>() % 100;
 
     attr0s.push_back(attr0);
@@ -266,6 +265,7 @@ void test(const size_t tuple_count, const AccessType access_type, const size_t p
     correlation_index->construct(attr2s, attr1s);
   } else if (access_type == ApproxCorrelationIndexAccess) {
     approx_correlation_index->construct(attr2s, attr1s);
+    approx_correlation_index->print();
   }
 
   TimeMeasurer timer;

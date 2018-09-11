@@ -20,12 +20,15 @@ class ApproxCorrelationIndex {
     return lhs.guest_ < rhs.guest_;
   }
 
-  struct CorrelationNode {
+  class CorrelationNode {
+
+  public:
 
     CorrelationNode(ApproxCorrelationIndex *index, const uint64_t offset_begin, const uint64_t offset_end) {
       offset_begin_ = offset_begin;
       offset_end_ = offset_end;
       offset_span_ = offset_end_ - offset_begin_;
+      child_offset_span_ = offset_span_ / index->fanout_;
 
       auto *container_ptr = index->container_;
       guest_begin_ = container_ptr[offset_begin_].guest_;
@@ -53,17 +56,17 @@ class ApproxCorrelationIndex {
     }
 
     void split(ApproxCorrelationIndex *index, CorrelationNode** new_nodes) {
-      assert(children_ == nullptr);
+      ASSERT(children_ == nullptr && children_count_ == 0, "children must be unassigned");
       children_count_ = index->fanout_;
       
       children_ = new CorrelationNode*[children_count_];
       children_index_ = new uint64_t[children_count_];
 
       for (size_t i = 0; i < children_count_ - 1; ++i) {
-        children_[i] = new CorrelationNode(index, offset_begin_ + offset_span_ * i, offset_begin_ + offset_span_ * (i + 1) - 1);
-        children_index_[i] = index->container_[offset_begin_ + offset_span_ * (i + 1)].guest_;
+        children_[i] = new CorrelationNode(index, offset_begin_ + child_offset_span_ * i, offset_begin_ + child_offset_span_ * (i + 1) - 1);
+        children_index_[i] = index->container_[offset_begin_ + child_offset_span_ * (i + 1)].guest_;
       }
-      children_[children_count_ - 1] = new CorrelationNode(index, offset_begin_ + offset_span_ * (children_count_ - 1), offset_end_);
+      children_[children_count_ - 1] = new CorrelationNode(index, offset_begin_ + child_offset_span_ * (children_count_ - 1), offset_end_);
       
       new_nodes = children_;
     }
@@ -79,8 +82,8 @@ class ApproxCorrelationIndex {
     void lookup(const uint64_t guest_key, uint64_t &ret_lhs_host, uint64_t &ret_rhs_host) {
       if (children_count_ == 0) {
         uint64_t host_key = (host_end_ - host_begin_) * 1.0 / (guest_end_ - guest_begin_) * (guest_key - guest_begin_) + host_begin_;
-        ret_lhs_host = host_key;
-        ret_rhs_host = host_key;
+        ret_lhs_host = host_key - 1;
+        ret_rhs_host = host_key + 1;
       } else {
         for (size_t i = 0; i < children_count_ - 1; ++i) {
           if (guest_key < children_index_[i]) {
@@ -93,11 +96,29 @@ class ApproxCorrelationIndex {
       }
     }
 
+    bool has_children() const {
+      return (children_ != nullptr);
+    }
+
+    CorrelationNode** get_children() const {
+      return children_;
+    }
+
+    void print() const {
+      std::cout << "offset: " << offset_begin_ << " " << offset_end_ << std::endl;
+      std::cout << "guest: " << guest_begin_ << " " << guest_end_ << std::endl;
+      std::cout << "host: " << host_begin_ << " " << host_end_ << std::endl;
+      std::cout << "======" << std::endl;
+    }
+
+  private:
+
     // offset range: [offset_begin_, offset_end_]
     uint64_t offset_begin_;
     uint64_t offset_end_;
 
     uint64_t offset_span_;
+    uint64_t child_offset_span_;
     
     // guest range: [guest_begin_, guest_end_]
     uint64_t guest_begin_; // guest_values[offset_begin_]
@@ -137,13 +158,13 @@ public:
   }
 
   void lookup(const uint64_t guest, uint64_t &ret_lhs_host, uint64_t &ret_rhs_host) {
-    assert(root_node_ != nullptr);
+    ASSERT(root_node_ != nullptr, "root note cannot be nullptr");
     root_node_->lookup(guest, ret_lhs_host, ret_rhs_host);
   }
 
-  void construct(std::vector<uint64_t> &guest_column, std::vector<uint64_t> &host_column) {
+  void construct(const std::vector<uint64_t> &guest_column, const std::vector<uint64_t> &host_column) {
 
-    assert(guest_column.size() == host_column.size());
+    ASSERT(guest_column.size() == host_column.size(), "guest and host columns must have same cardinality");
 
     size_ = guest_column.size();
 
@@ -164,7 +185,6 @@ public:
     CorrelationNode** new_nodes = nullptr;
     root_node_->split(this, new_nodes);
 
-
     // nodes.push(root_node_);
 
     // while (!nodes.empty()) {
@@ -182,6 +202,31 @@ public:
     //   }
 
     // }
+  }
+
+  void print() const {
+
+    ASSERT(root_node_ != nullptr, "root note cannot be nullptr");
+
+    std::queue<CorrelationNode*> nodes;
+
+    nodes.push(root_node_);
+
+    while (!nodes.empty()) {
+      auto *node = nodes.front();
+      nodes.pop();
+
+      node->print();
+
+      CorrelationNode** next_nodes = node->get_children();
+
+      if (next_nodes != nullptr) {
+        for (size_t i = 0; i < fanout_; ++i) {
+          nodes.push(next_nodes[i]);
+        }
+      }
+    }
+
   }
 
 private:

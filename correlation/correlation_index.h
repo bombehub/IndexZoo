@@ -258,9 +258,9 @@ public:
   }
 
 
-  void construct(std::vector<uint64_t> &guest_column, std::vector<uint64_t> &host_column) {
+  void construct(const std::vector<uint64_t> &guest_column, const std::vector<uint64_t> &host_column) {
 
-    assert(guest_column.size() == host_column.size());
+    ASSERT(guest_column.size() == host_column.size(), "guest and host columns must have same cardinality");
 
     size_ = guest_column.size();
 

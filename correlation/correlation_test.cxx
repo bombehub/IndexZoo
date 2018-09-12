@@ -105,6 +105,8 @@ uint64_t correlation_index_lookup(TupleSchema &tuple_schema, GenericDataTable *d
 
       base_secondary_index->lookup(host_key, pkeys);
 
+      // std::cout << "pkeys size = " << pkeys.size() << std::endl;
+
       // found primary keys
       for (auto pkey : pkeys) {
 
@@ -153,25 +155,21 @@ uint64_t approx_correlation_index_lookup(TupleSchema &tuple_schema, GenericDataT
     std::vector<uint64_t> pkeys;
     base_secondary_index->range_lookup(lhs_host_key, rhs_host_key, pkeys);
 
-    // found primary keys
-    for (auto pkey : pkeys) {
+    std::vector<Uint64> offsets;
 
-      std::vector<Uint64> offsets;
+    primary_index->lookup(pkeys, offsets);
 
-      primary_index->lookup(pkey, offsets);
+    for (auto offset : offsets) {
+      char *value = data_table->get_tuple(offset);
+      
+      size_t attr2_offset = tuple_schema.get_attr_offset(2);
+      uint64_t attr2_ret = *(uint64_t*)(value + attr2_offset);
 
-      for (auto offset : offsets) {
-        char *value = data_table->get_tuple(offset);
-        
-        size_t attr2_offset = tuple_schema.get_attr_offset(2);
-        uint64_t attr2_ret = *(uint64_t*)(value + attr2_offset);
+      if (attr2_ret == key) {
+        size_t attr3_offset = tuple_schema.get_attr_offset(3);
+        uint64_t attr3_ret = *(uint64_t*)(value + attr3_offset);
 
-        if (attr2_ret == key) {
-          size_t attr3_offset = tuple_schema.get_attr_offset(3);
-          uint64_t attr3_ret = *(uint64_t*)(value + attr3_offset);
-
-          sum += attr3_ret;
-        }
+        sum += attr3_ret;
       }
     }
 
@@ -231,8 +229,8 @@ void test(const size_t tuple_count, const AccessType access_type, const size_t p
   for (size_t tuple_id = 0; tuple_id < tuple_count; ++tuple_id) {
     
     uint64_t attr0 = rand_gen.next<uint64_t>(); // primary key
-    uint64_t attr1 = tuple_id * 1.1;
-    uint64_t attr2 = tuple_id * 1.2;
+    uint64_t attr1 = tuple_id;
+    uint64_t attr2 = tuple_id;
     uint64_t attr3 = rand_gen.next<uint64_t>() % 100;
 
     attr0s.push_back(attr0);

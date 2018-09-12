@@ -21,6 +21,15 @@ public:
     }
   }
 
+  void lookup(const std::vector<uint64_t> &keys, std::vector<uint64_t> &values) {
+    for (auto key : keys) {
+      auto ret = container_.equal_range(key);
+      for (auto it = ret.first; it != ret.second; ++it) {
+        values.push_back(it->second);
+      }
+    }
+  }
+
   void range_lookup(const uint64_t &lhs_key, const uint64_t &rhs_key, std::vector<uint64_t> &values) {
     
     if (lhs_key > rhs_key) { return; }

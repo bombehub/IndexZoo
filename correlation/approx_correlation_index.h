@@ -24,10 +24,10 @@ class ApproxCorrelationIndex {
 
   public:
 
-    CorrelationNode(ApproxCorrelationIndex *index, const uint64_t offset_begin, const uint64_t offset_end) {
+    CorrelationNode(ApproxCorrelationIndex *index, const uint64_t offset_begin, const uint64_t offset_end, const size_t level) {
       offset_begin_ = offset_begin;
       offset_end_ = offset_end;
-      offset_span_ = offset_end_ - offset_begin_;
+      offset_span_ = offset_end_ - offset_begin_ + 1;
       child_offset_span_ = offset_span_ / index->fanout_;
 
       auto *container_ptr = index->container_;
@@ -39,6 +39,8 @@ class ApproxCorrelationIndex {
       
       children_ = nullptr;
       children_count_ = 0;
+
+      level_ = level;
     }
 
     ~CorrelationNode() {
@@ -55,7 +57,7 @@ class ApproxCorrelationIndex {
       }
     }
 
-    void split(ApproxCorrelationIndex *index, CorrelationNode** new_nodes) {
+    void split(ApproxCorrelationIndex *index, CorrelationNode** &new_nodes) {
       ASSERT(children_ == nullptr && children_count_ == 0, "children must be unassigned");
       children_count_ = index->fanout_;
       
@@ -63,27 +65,81 @@ class ApproxCorrelationIndex {
       children_index_ = new uint64_t[children_count_];
 
       for (size_t i = 0; i < children_count_ - 1; ++i) {
-        children_[i] = new CorrelationNode(index, offset_begin_ + child_offset_span_ * i, offset_begin_ + child_offset_span_ * (i + 1) - 1);
+        children_[i] = new CorrelationNode(index, offset_begin_ + child_offset_span_ * i, offset_begin_ + child_offset_span_ * (i + 1) - 1, level_ + 1);
         children_index_[i] = index->container_[offset_begin_ + child_offset_span_ * (i + 1)].guest_;
       }
-      children_[children_count_ - 1] = new CorrelationNode(index, offset_begin_ + child_offset_span_ * (children_count_ - 1), offset_end_);
+      children_[children_count_ - 1] = new CorrelationNode(index, offset_begin_ + child_offset_span_ * (children_count_ - 1), offset_end_, level_ + 1);
       
       new_nodes = children_;
+
+      outlier_buffer_.clear();
     }
 
     bool validate(ApproxCorrelationIndex *index) {
-      for (uint64_t i = offset_begin_; i <= offset_end_; ++i) {
+      auto *container_ptr = index->container_;
 
+      if (offset_span_ <= 10) {
+        for (uint64_t i = offset_begin_; i <= offset_end_; ++i) {
+          uint64_t guest = container_ptr[i].guest_;
+          uint64_t host = container_ptr[i].host_;
+          outlier_buffer_[guest] = host;
+        }
+        return true;
       }
-      return true;
+
+      for (uint64_t i = offset_begin_; i <= offset_end_; ++i) {
+        uint64_t guest = container_ptr[i].guest_;
+        uint64_t host = container_ptr[i].host_;
+
+        uint64_t estimate_host = estimate(guest);
+
+        uint64_t estimate_lhs_host, estimate_rhs_host;
+
+        get_bound(estimate_host, estimate_lhs_host, estimate_rhs_host);
+
+        if (estimate_lhs_host > host || estimate_rhs_host < host) {
+          // if not in the range
+          outlier_buffer_[guest] = host;
+        }
+      }
+      
+      if (outlier_buffer_.size() > offset_span_ * index->outlier_threshold_) {
+        return false;
+      } else {
+        return true;
+      }
 
     }
 
-    void lookup(const uint64_t guest_key, uint64_t &ret_lhs_host, uint64_t &ret_rhs_host) {
+    void lookup(const uint64_t guest_key, uint64_t &ret_lhs_host, uint64_t &ret_rhs_host) const {
       if (children_count_ == 0) {
-        uint64_t host_key = (host_end_ - host_begin_) * 1.0 / (guest_end_ - guest_begin_) * (guest_key - guest_begin_) + host_begin_;
-        ret_lhs_host = host_key - 1;
-        ret_rhs_host = host_key + 1;
+
+        // first check outlier_buffer
+        auto iter = outlier_buffer_.find(guest_key);
+        if (iter != outlier_buffer_.end()) {
+
+          uint64_t host_key = iter->second;
+
+          ret_lhs_host = host_key;
+          ret_rhs_host = host_key;
+
+          return;
+
+        } else {
+
+          uint64_t host_key = estimate(guest_key);
+
+          get_bound(host_key, ret_lhs_host, ret_rhs_host);
+
+          // uint64_t host_key = (host_end_ - host_begin_) * 1.0 / (guest_end_ - guest_begin_) * (guest_key - guest_begin_) + host_begin_;
+
+          // ret_lhs_host = host_key - 1;
+          // ret_rhs_host = host_key + 1;  
+
+
+          return;
+        }
+
       } else {
         for (size_t i = 0; i < children_count_ - 1; ++i) {
           if (guest_key < children_index_[i]) {
@@ -96,22 +152,44 @@ class ApproxCorrelationIndex {
       }
     }
 
-    bool has_children() const {
+    inline uint64_t estimate(const uint64_t key) const {
+      ASSERT(guest_end_ != guest_begin_, "guest_end_ cannot be equal to guest_begin_");
+      return (host_end_ - host_begin_) * 1.0 / (guest_end_ - guest_begin_) * (key - guest_begin_) + host_begin_;
+    }
+
+    inline void get_bound(const uint64_t key, uint64_t &lhs_key, uint64_t &rhs_key) const {
+      if (key < 1) {
+        lhs_key = 0;
+      } else {
+        lhs_key = key - 1;
+      }
+      lhs_key = key - 1;
+      rhs_key = key + 1;      
+    }
+
+    inline bool has_children() const {
       return (children_ != nullptr);
     }
 
-    CorrelationNode** get_children() const {
+    inline CorrelationNode** get_children() const {
       return children_;
     }
 
     void print() const {
+      std::cout << "offset span: " << offset_span_ << std::endl;
       std::cout << "offset: " << offset_begin_ << " " << offset_end_ << std::endl;
       std::cout << "guest: " << guest_begin_ << " " << guest_end_ << std::endl;
       std::cout << "host: " << host_begin_ << " " << host_end_ << std::endl;
       std::cout << "======" << std::endl;
     }
 
+    size_t get_level() const {
+      return level_;
+    }
+
   private:
+
+    size_t level_;
 
     // offset range: [offset_begin_, offset_end_]
     uint64_t offset_begin_;
@@ -145,15 +223,22 @@ public:
     error_bound_ = error_bound;
     outlier_threshold_ = outlier_threshold;
 
+    max_level_ = 0;
+    node_count_ = 0;
+
   }
 
   ~ApproxCorrelationIndex() {
 
-    delete[] container_;
-    container_ = nullptr;
+    if (container_ != nullptr) {
+      delete[] container_;
+      container_ = nullptr;
+    }
 
-    delete root_node_;
-    root_node_ = nullptr;
+    if (root_node_ != nullptr) {
+      delete root_node_;
+      root_node_ = nullptr;
+    }
 
   }
 
@@ -178,51 +263,64 @@ public:
     // sort data
     std::sort(container_, container_ + size_, compare_func);
 
-    // std::queue<CorrelationNode*> nodes;
-
-    root_node_ = new CorrelationNode(this, 0, size_ - 1);
-
-    CorrelationNode** new_nodes = nullptr;
-    root_node_->split(this, new_nodes);
-
-    // nodes.push(root_node_);
-
-    // while (!nodes.empty()) {
-    //   auto *node = nodes.front();
-    //   nodes.pop();
-
-    //   bool ret = node->validate(this);
-
-    //   if (ret == false) {
-    //     CorrelationNode** new_nodes = nullptr;
-    //     node->split(this, new_nodes);
-    //     for (size_t i = 0; i < fanout_; i++) {
-    //       nodes.push(new_nodes[i]);
-    //     }
-    //   }
-
-    // }
-  }
-
-  void print() const {
-
-    ASSERT(root_node_ != nullptr, "root note cannot be nullptr");
+    root_node_ = new CorrelationNode(this, 0, size_ - 1, 0);
 
     std::queue<CorrelationNode*> nodes;
-
     nodes.push(root_node_);
 
     while (!nodes.empty()) {
       auto *node = nodes.front();
       nodes.pop();
 
-      node->print();
+      node_count_++;
 
-      CorrelationNode** next_nodes = node->get_children();
+      if (node->get_level() >= max_level_) {
+        max_level_ = node->get_level();
+      }
 
-      if (next_nodes != nullptr) {
-        for (size_t i = 0; i < fanout_; ++i) {
-          nodes.push(next_nodes[i]);
+      bool ret = node->validate(this);
+
+      if (ret == false) {
+        CorrelationNode** new_nodes = nullptr;
+        node->split(this, new_nodes);
+        for (size_t i = 0; i < fanout_; i++) {
+          nodes.push(new_nodes[i]);
+        }
+      }
+
+    }
+
+    delete[] container_;
+    container_ = nullptr;
+  }
+
+  void print(const bool verbose = false) const {
+
+    if (verbose == false) { 
+
+      std::cout << "max level = " << max_level_ << std::endl;
+      std::cout << "node count = " << node_count_ << std::endl;
+
+    } else {
+
+      ASSERT(root_node_ != nullptr, "root note cannot be nullptr");
+
+      std::queue<CorrelationNode*> nodes;
+
+      nodes.push(root_node_);
+
+      while (!nodes.empty()) {
+        auto *node = nodes.front();
+        nodes.pop();
+
+        node->print();
+
+        CorrelationNode** next_nodes = node->get_children();
+
+        if (next_nodes != nullptr) {
+          for (size_t i = 0; i < fanout_; ++i) {
+            nodes.push(next_nodes[i]);
+          }
         }
       }
     }
@@ -239,5 +337,8 @@ private:
   float outlier_threshold_;
 
   CorrelationNode *root_node_;
+
+  size_t max_level_;
+  size_t node_count_;
 
 };

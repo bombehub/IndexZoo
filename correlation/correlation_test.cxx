@@ -295,13 +295,21 @@ void test(const size_t tuple_count, const AccessType access_type, const size_t p
   std::cout << "sum = " << sum << std::endl;
   
   double total_mem_size = get_memory_mb();
-  std::cout << "mem size: " << init_mem_size << " mb, " << total_mem_size << " mb." << std::endl;
+  std::cout << "mem size: " << init_mem_size << " MB, " << total_mem_size << " MB." << std::endl;
 }
 
 
 int main(int argc, char *argv[]) {
   if (argc != 3 && argc != 4) {
     std::cerr << "usage: " << argv[0] << " tuple_count access_type param" << std::endl;
+    std::cerr << "================" << std::endl;
+    std::cerr << "access_type: " << std::endl;
+    std::cerr << "  [0] pindex(0) + sindex(1), lookup pindex(0)" << std::endl;
+    std::cerr << "  [1] pindex(0) + sindex(1), lookup sindex(1)" << std::endl;
+    std::cerr << "  [2] pindex(0) + sindex(1) + sindex(2), lookup sindex(2)" << std::endl;
+    std::cerr << "  [3] pindex(0) + sindex(1) + cindex(2), lookup cindex(2)" << std::endl;
+    std::cerr << "  [4] pindex(0) + sindex(1) + acindex(2), lookup acindex(2)" << std::endl;
+
     return -1;
   }
 

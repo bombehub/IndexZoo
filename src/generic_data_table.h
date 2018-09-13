@@ -141,7 +141,7 @@ public:
   };
 
 public:
-  GenericDataTableIterator(GenericDataTable *table_ptr) : 
+  GenericDataTableIterator(const GenericDataTable *table_ptr) : 
     table_ptr_(table_ptr), curr_block_id_(0), curr_rel_offset_(0) {
     
     ASSERT(table_ptr_->data_blocks_.size() != 0, "table must contain at least one data block!");
@@ -183,7 +183,7 @@ public:
 
 
 private:
-  GenericDataTable *table_ptr_;
+  const GenericDataTable *table_ptr_;
 
   BlockIDT curr_block_id_;
   RelOffsetT curr_rel_offset_;

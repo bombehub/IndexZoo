@@ -6,7 +6,7 @@
 #include <queue>
 
 
-class ApproxCorrelationIndex {
+class CorrelationIndex {
 
   struct AttributePair {
     AttributePair() : guest_(0), host_(0) {}
@@ -24,13 +24,16 @@ class ApproxCorrelationIndex {
 
   public:
 
-    CorrelationNode(ApproxCorrelationIndex *index, const uint64_t offset_begin, const uint64_t offset_end, const size_t level) {
+    CorrelationNode(CorrelationIndex *index, const uint64_t offset_begin, const uint64_t offset_end, const size_t level) {
+      
+      index_ = index;
+
       offset_begin_ = offset_begin;
       offset_end_ = offset_end;
       offset_span_ = offset_end_ - offset_begin_ + 1;
-      child_offset_span_ = offset_span_ / index->fanout_;
+      child_offset_span_ = offset_span_ / index_->fanout_;
 
-      auto *container_ptr = index->container_;
+      auto *container_ptr = index_->container_;
       guest_begin_ = container_ptr[offset_begin_].guest_;
       guest_end_ = container_ptr[offset_end_].guest_;
 
@@ -57,26 +60,26 @@ class ApproxCorrelationIndex {
       }
     }
 
-    void split(ApproxCorrelationIndex *index, CorrelationNode** &new_nodes) {
+    void split(CorrelationNode** &new_nodes) {
       ASSERT(children_ == nullptr && children_count_ == 0, "children must be unassigned");
-      children_count_ = index->fanout_;
+      children_count_ = index_->fanout_;
       
       children_ = new CorrelationNode*[children_count_];
       children_index_ = new uint64_t[children_count_];
 
       for (size_t i = 0; i < children_count_ - 1; ++i) {
-        children_[i] = new CorrelationNode(index, offset_begin_ + child_offset_span_ * i, offset_begin_ + child_offset_span_ * (i + 1) - 1, level_ + 1);
-        children_index_[i] = index->container_[offset_begin_ + child_offset_span_ * (i + 1)].guest_;
+        children_[i] = new CorrelationNode(index_, offset_begin_ + child_offset_span_ * i, offset_begin_ + child_offset_span_ * (i + 1) - 1, level_ + 1);
+        children_index_[i] = index_->container_[offset_begin_ + child_offset_span_ * (i + 1)].guest_;
       }
-      children_[children_count_ - 1] = new CorrelationNode(index, offset_begin_ + child_offset_span_ * (children_count_ - 1), offset_end_, level_ + 1);
+      children_[children_count_ - 1] = new CorrelationNode(index_, offset_begin_ + child_offset_span_ * (children_count_ - 1), offset_end_, level_ + 1);
       
       new_nodes = children_;
 
       outlier_buffer_.clear();
     }
 
-    bool validate(ApproxCorrelationIndex *index) {
-      auto *container_ptr = index->container_;
+    bool validate() {
+      auto *container_ptr = index_->container_;
 
       if (offset_span_ <= 10) {
         for (uint64_t i = offset_begin_; i <= offset_end_; ++i) {
@@ -103,7 +106,7 @@ class ApproxCorrelationIndex {
         }
       }
       
-      if (outlier_buffer_.size() > offset_span_ * index->outlier_threshold_) {
+      if (outlier_buffer_.size() > offset_span_ * index_->outlier_threshold_) {
         return false;
       } else {
         return true;
@@ -152,14 +155,13 @@ class ApproxCorrelationIndex {
     }
 
     inline void get_bound(const uint64_t key, uint64_t &lhs_key, uint64_t &rhs_key) const {
-      uint64_t epsilon = 20;
-      if (key < epsilon) {
+      if (key < index_->error_bound_) {
         lhs_key = 0;
       } else {
-        lhs_key = key - epsilon;
+        lhs_key = key - index_->error_bound_;
       }
-      lhs_key = key - epsilon;
-      rhs_key = key + epsilon;      
+      lhs_key = key - index_->error_bound_;
+      rhs_key = key + index_->error_bound_;
     }
 
     inline bool has_children() const {
@@ -183,6 +185,8 @@ class ApproxCorrelationIndex {
     }
 
   private:
+
+    CorrelationIndex *index_;
 
     size_t level_;
 
@@ -210,7 +214,7 @@ class ApproxCorrelationIndex {
   };
 
 public:
-  ApproxCorrelationIndex(const size_t fanout = 2, const float error_bound = 0.1, const float outlier_threshold = 0.2) {
+  CorrelationIndex(const size_t fanout = 2, const float error_bound = 0.1, const float outlier_threshold = 0.2) {
 
     ASSERT(fanout >= 2, "fanout must be no less than 2");
 
@@ -223,7 +227,7 @@ public:
 
   }
 
-  ~ApproxCorrelationIndex() {
+  ~CorrelationIndex() {
 
     if (container_ != nullptr) {
       delete[] container_;
@@ -242,18 +246,32 @@ public:
     root_node_->lookup(guest, ret_lhs_host, ret_rhs_host);
   }
 
-  void construct(const std::vector<uint64_t> &guest_column, const std::vector<uint64_t> &host_column) {
+  void construct(const GenericDataTable *data_table, const TupleSchema &tuple_schema, const size_t guest_column_id, const size_t host_column_id) {
 
-    ASSERT(guest_column.size() == host_column.size(), "guest and host columns must have same cardinality");
-
-    size_ = guest_column.size();
+    size_ = data_table->size();
 
     container_ = new AttributePair[size_];
 
-    for (size_t i = 0; i < size_; ++i) {
-      container_[i].guest_ = guest_column.at(i);
-      container_[i].host_ = host_column.at(i);
+    GenericDataTableIterator iterator(data_table);
+    size_t i = 0;
+    while (iterator.has_next()) {
+      auto entry = iterator.next();
+      
+      char *tuple_ptr = entry.key_;
+
+      size_t guest_attr_offset = tuple_schema.get_attr_offset(guest_column_id);
+      uint64_t guest_attr_ret = *(uint64_t*)(tuple_ptr + guest_attr_offset);
+
+      size_t host_attr_offset = tuple_schema.get_attr_offset(host_column_id);
+      uint64_t host_attr_ret = *(uint64_t*)(tuple_ptr + host_attr_offset);
+
+
+      container_[i].guest_ = guest_attr_ret;
+      container_[i].host_ = host_attr_ret;
+      i++;
     }
+
+    ASSERT(i == size_, "incorrect loading");
 
     // sort data
     std::sort(container_, container_ + size_, compare_func);
@@ -273,11 +291,11 @@ public:
         max_level_ = node->get_level();
       }
 
-      bool ret = node->validate(this);
+      bool ret = node->validate();
 
       if (ret == false) {
         CorrelationNode** new_nodes = nullptr;
-        node->split(this, new_nodes);
+        node->split(new_nodes);
         for (size_t i = 0; i < fanout_; i++) {
           nodes.push(new_nodes[i]);
         }

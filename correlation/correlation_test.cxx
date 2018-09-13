@@ -229,8 +229,8 @@ void test(const size_t tuple_count, const AccessType access_type, const size_t p
   for (size_t tuple_id = 0; tuple_id < tuple_count; ++tuple_id) {
     
     uint64_t attr0 = rand_gen.next<uint64_t>(); // primary key
-    uint64_t attr1 = tuple_id;
-    uint64_t attr2 = tuple_id;
+    uint64_t attr1 = tuple_id * 3;
+    uint64_t attr2 = tuple_id * 2;
     uint64_t attr3 = rand_gen.next<uint64_t>() % 100;
 
     attr0s.push_back(attr0);

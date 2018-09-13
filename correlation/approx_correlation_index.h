@@ -126,16 +126,10 @@ class ApproxCorrelationIndex {
           return;
 
         } else {
-
+          // estimate the host key via function computation
           uint64_t host_key = estimate(guest_key);
-
+          // get min and max bound based on estimated value
           get_bound(host_key, ret_lhs_host, ret_rhs_host);
-
-          // uint64_t host_key = (host_end_ - host_begin_) * 1.0 / (guest_end_ - guest_begin_) * (guest_key - guest_begin_) + host_begin_;
-
-          // ret_lhs_host = host_key - 1;
-          // ret_rhs_host = host_key + 1;  
-
 
           return;
         }
@@ -158,13 +152,14 @@ class ApproxCorrelationIndex {
     }
 
     inline void get_bound(const uint64_t key, uint64_t &lhs_key, uint64_t &rhs_key) const {
-      if (key < 1) {
+      uint64_t epsilon = 20;
+      if (key < epsilon) {
         lhs_key = 0;
       } else {
-        lhs_key = key - 1;
+        lhs_key = key - epsilon;
       }
-      lhs_key = key - 1;
-      rhs_key = key + 1;      
+      lhs_key = key - epsilon;
+      rhs_key = key + epsilon;      
     }
 
     inline bool has_children() const {

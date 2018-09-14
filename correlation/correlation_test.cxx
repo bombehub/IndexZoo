@@ -18,6 +18,8 @@
 #include "correlation_index.h"
 #include "tuple_schema.h"
 
+#include "correlation_common.h"
+
 
 std::unique_ptr<GenericDataTable> data_table;
 
@@ -46,13 +48,12 @@ enum AccessType {
   CorrelationIndexAccess,
 };
 
-
 struct Config {
-  size_t tuple_count_;
-  size_t query_count_;
-  AccessType access_type_;
-  bool pkey_pointer_;
-  uint64_t param0_;
+  AccessType access_type_ = PrimaryIndexAccess;
+  IndexPointerType index_pointer_type_ = LogicalPointerType;
+  size_t tuple_count_ = 100000;
+  size_t query_count_ = 100000;
+  uint64_t fanout_ = 4;
 };
 
 Config config;
@@ -61,32 +62,70 @@ void usage(FILE *out) {
   fprintf(out,
           "Command line options : index_benchmark <options> \n"
           "  -h --help              : print help message \n"
-          "  -a --access_type       : access type \n"
+          "  -a --access            : access type \n"
           "                            -- (0) primary index lookup \n"
-          );
+          "                            -- (1) secondary index lookup \n"
+          "                            -- (2) baseline index lookup \n"
+          "                            -- (3) correlation index lookup \n"
+          "  -i --index_pointer     : index pointer type \n"
+          "                            -- (0) logical pointer \n"
+          "                            -- (1) physical pointer \n"
+          "  -t --tuple_count       : tuple count \n"
+          "  -q --query_count       : query count \n"
+          "  -f --fanout            : fanout \n"
+  );
 }
 
-void parser(int argc, char *argv[]) {
+static struct option opts[] = {
+    { "access",            optional_argument, NULL, 'a' },
+    { "index_pointer",     optional_argument, NULL, 'i' },
+    { "tuple_count",       optional_argument, NULL, 't' },
+    { "query_count",       optional_argument, NULL, 'q' },
+    { "fanout",            optional_argument, NULL, 'f' },
+    { NULL, 0, NULL, 0 }
+};
 
-  if (argc != 3 && argc != 4) {
-    std::cerr << "usage: " << argv[0] << " tuple_count access_type param" << std::endl;
-    std::cerr << "================" << std::endl;
-    std::cerr << "access_type: " << std::endl;
-    std::cerr << "  [0] pindex(0) + sindex(1), lookup pindex(0)" << std::endl;
-    std::cerr << "  [1] pindex(0) + sindex(1), lookup sindex(1)" << std::endl;
-    std::cerr << "  [2] pindex(0) + sindex(1) + sindex(2), lookup sindex(2)" << std::endl;
-    std::cerr << "  [3] pindex(0) + sindex(1) + cindex(2), lookup cindex(2)" << std::endl;
+void parse_args(int argc, char* argv[]) {
+  
+  while (1) {
+    int idx = 0;
+    int c = getopt_long(argc, argv, "ha:i:t:q:f:", opts, &idx);
 
-    exit(EXIT_FAILURE);
-    return;
-  }
+    if (c == -1) break;
 
-  config.tuple_count_ = atoi(argv[1]);
-  config.query_count_ = config.tuple_count_;
-  config.access_type_ = AccessType(atoi(argv[2]));
-  config.param0_ = 2;
-  if (argc == 4) {
-    config.param0_ = atoi(argv[3]);
+    switch (c) {
+      case 'a': {
+        config.access_type_ = (AccessType)atoi(optarg);
+        break;
+      }
+      case 'i': {
+        config.index_pointer_type_ = (IndexPointerType)atoi(optarg);
+        break;
+      }
+      case 't': {
+        config.tuple_count_ = atoi(optarg);
+        break;
+      }
+      case 'q': {
+        config.query_count_ = atoi(optarg);
+        break;
+      }
+      case 'f': {
+        config.fanout_ = atoi(optarg);
+        break;
+      }
+      case 'h': {
+        usage(stderr);
+        exit(EXIT_FAILURE);
+        break;
+      }
+      default: {
+        fprintf(stderr, "Unknown option: -%c-\n", c);
+        usage(stderr);
+        exit(EXIT_FAILURE);
+        break;
+      }
+    }
   }
 }
 
@@ -104,7 +143,7 @@ void init() {
   if (config.access_type_ == BaselineIndexAccess) {
     baseline_index.reset(new BTreeIndex());
   } else if (config.access_type_ == CorrelationIndexAccess) {
-    correlation_index.reset(new CorrelationIndex(config.param0_));
+    correlation_index.reset(new CorrelationIndex(config.fanout_));
   } 
 }
 
@@ -139,12 +178,16 @@ void build_table() {
     primary_index->insert(attr0, offset.raw_data());
 
     // update secondary index
-    secondary_index->insert(attr1, attr0);
+    if (config.index_pointer_type_ == LogicalPointerType) {
+      secondary_index->insert(attr1, attr0);
+    } else {
+      secondary_index->insert(attr1, offset.raw_data());
+    }
 
   }
 
   if (config.access_type_ == BaselineIndexAccess) {
-    baseline_index->construct(data_table.get(), tuple_schema, 2);
+    baseline_index->construct(data_table.get(), tuple_schema, 2, config.index_pointer_type_);
   } else if (config.access_type_ == CorrelationIndexAccess) {
     correlation_index->construct(data_table.get(), tuple_schema, 2, 1);
     correlation_index->print();
@@ -188,25 +231,49 @@ uint64_t secondary_index_lookup() {
   uint64_t sum = 0;
 
   FastRandom rand_gen;
-  for (size_t query_id = 0; query_id < config.query_count_; ++query_id) {
 
-    uint64_t key = keys.at(rand_gen.next<uint64_t>() % key_count);
+  if (config.index_pointer_type_ == LogicalPointerType) {
 
-    std::vector<uint64_t> pkeys;
-    
-    secondary_index->lookup(key, pkeys);
-    
-    std::vector<uint64_t> offsets;
+    for (size_t query_id = 0; query_id < config.query_count_; ++query_id) {
 
-    primary_index->lookup(pkeys, offsets);
+      uint64_t key = keys.at(rand_gen.next<uint64_t>() % key_count);
 
-    for (auto offset : offsets) {
-      char *value = data_table->get_tuple(offset);
-      size_t attr3_offset = tuple_schema.get_attr_offset(3);
-      uint64_t attr3_ret = *(uint64_t*)(value + attr3_offset);
+      std::vector<uint64_t> pkeys;
+      
+      secondary_index->lookup(key, pkeys);
+      
+      std::vector<uint64_t> offsets;
 
-      sum += attr3_ret;
+      primary_index->lookup(pkeys, offsets);
+
+      for (auto offset : offsets) {
+        char *value = data_table->get_tuple(offset);
+        size_t attr3_offset = tuple_schema.get_attr_offset(3);
+        uint64_t attr3_ret = *(uint64_t*)(value + attr3_offset);
+
+        sum += attr3_ret;
+      }
     }
+
+  } else {
+
+    for (size_t query_id = 0; query_id < config.query_count_; ++query_id) {
+
+      uint64_t key = keys.at(rand_gen.next<uint64_t>() % key_count);
+
+      std::vector<uint64_t> offsets;
+      
+      secondary_index->lookup(key, offsets);
+      
+      for (auto offset : offsets) {
+        char *value = data_table->get_tuple(offset);
+        size_t attr3_offset = tuple_schema.get_attr_offset(3);
+        uint64_t attr3_ret = *(uint64_t*)(value + attr3_offset);
+
+        sum += attr3_ret;
+      }
+    }
+
   }
 
   return sum;
@@ -221,25 +288,49 @@ uint64_t baseline_index_lookup() {
   uint64_t sum = 0;
 
   FastRandom rand_gen;
-  for (size_t query_id = 0; query_id < config.query_count_; ++query_id) {
 
-    uint64_t key = keys.at(rand_gen.next<uint64_t>() % key_count);
+  if (config.index_pointer_type_ == LogicalPointerType) {
 
-    std::vector<uint64_t> pkeys;
-    
-    baseline_index->lookup(key, pkeys);
-    
-    std::vector<uint64_t> offsets;
+    for (size_t query_id = 0; query_id < config.query_count_; ++query_id) {
 
-    primary_index->lookup(pkeys, offsets);
+      uint64_t key = keys.at(rand_gen.next<uint64_t>() % key_count);
 
-    for (auto offset : offsets) {
-      char *value = data_table->get_tuple(offset);
-      size_t attr3_offset = tuple_schema.get_attr_offset(3);
-      uint64_t attr3_ret = *(uint64_t*)(value + attr3_offset);
+      std::vector<uint64_t> pkeys;
+      
+      baseline_index->lookup(key, pkeys);
+      
+      std::vector<uint64_t> offsets;
 
-      sum += attr3_ret;
+      primary_index->lookup(pkeys, offsets);
+
+      for (auto offset : offsets) {
+        char *value = data_table->get_tuple(offset);
+        size_t attr3_offset = tuple_schema.get_attr_offset(3);
+        uint64_t attr3_ret = *(uint64_t*)(value + attr3_offset);
+
+        sum += attr3_ret;
+      }
     }
+
+  } else {
+
+    for (size_t query_id = 0; query_id < config.query_count_; ++query_id) {
+
+      uint64_t key = keys.at(rand_gen.next<uint64_t>() % key_count);
+
+      std::vector<uint64_t> offsets;
+      
+      baseline_index->lookup(key, offsets);
+      
+      for (auto offset : offsets) {
+        char *value = data_table->get_tuple(offset);
+        size_t attr3_offset = tuple_schema.get_attr_offset(3);
+        uint64_t attr3_ret = *(uint64_t*)(value + attr3_offset);
+
+        sum += attr3_ret;
+      }
+    }
+
   }
 
   return sum;
@@ -255,35 +346,71 @@ uint64_t correlation_index_lookup() {
   uint64_t sum = 0;
 
   FastRandom rand_gen;
-  for (size_t query_id = 0; query_id < config.query_count_; ++query_id) {
 
-    uint64_t key = keys.at(rand_gen.next<uint64_t>() % key_count);
+  if (config.index_pointer_type_ == LogicalPointerType) {
 
-    uint64_t lhs_host_key = 0;
-    uint64_t rhs_host_key = 0;
-    // find host key range
-    correlation_index->lookup(key, lhs_host_key, rhs_host_key);
+    for (size_t query_id = 0; query_id < config.query_count_; ++query_id) {
 
-    std::vector<uint64_t> pkeys;
+      uint64_t key = keys.at(rand_gen.next<uint64_t>() % key_count);
 
-    secondary_index->range_lookup(lhs_host_key, rhs_host_key, pkeys);
+      uint64_t lhs_host_key = 0;
+      uint64_t rhs_host_key = 0;
+      // find host key range
+      correlation_index->lookup(key, lhs_host_key, rhs_host_key);
 
-    std::vector<Uint64> offsets;
+      std::vector<uint64_t> pkeys;
 
-    primary_index->lookup(pkeys, offsets);
+      secondary_index->range_lookup(lhs_host_key, rhs_host_key, pkeys);
 
-    for (auto offset : offsets) {
-      char *value = data_table->get_tuple(offset);
-      
-      size_t attr2_offset = tuple_schema.get_attr_offset(2);
-      uint64_t attr2_ret = *(uint64_t*)(value + attr2_offset);
+      std::vector<uint64_t> offsets;
 
-      if (attr2_ret == key) {
-        size_t attr3_offset = tuple_schema.get_attr_offset(3);
-        uint64_t attr3_ret = *(uint64_t*)(value + attr3_offset);
+      primary_index->lookup(pkeys, offsets);
 
-        sum += attr3_ret;
+      for (auto offset : offsets) {
+        char *value = data_table->get_tuple(offset);
+        
+        size_t attr2_offset = tuple_schema.get_attr_offset(2);
+        uint64_t attr2_ret = *(uint64_t*)(value + attr2_offset);
+
+        if (attr2_ret == key) {
+          size_t attr3_offset = tuple_schema.get_attr_offset(3);
+          uint64_t attr3_ret = *(uint64_t*)(value + attr3_offset);
+
+          sum += attr3_ret;
+        }
       }
+
+    }
+
+  } else {
+
+    for (size_t query_id = 0; query_id < config.query_count_; ++query_id) {
+
+      uint64_t key = keys.at(rand_gen.next<uint64_t>() % key_count);
+
+      uint64_t lhs_host_key = 0;
+      uint64_t rhs_host_key = 0;
+      // find host key range
+      correlation_index->lookup(key, lhs_host_key, rhs_host_key);
+
+      std::vector<uint64_t> offsets;
+
+      secondary_index->range_lookup(lhs_host_key, rhs_host_key, offsets);
+
+      for (auto offset : offsets) {
+        char *value = data_table->get_tuple(offset);
+        
+        size_t attr2_offset = tuple_schema.get_attr_offset(2);
+        uint64_t attr2_ret = *(uint64_t*)(value + attr2_offset);
+
+        if (attr2_ret == key) {
+          size_t attr3_offset = tuple_schema.get_attr_offset(3);
+          uint64_t attr3_ret = *(uint64_t*)(value + attr3_offset);
+
+          sum += attr3_ret;
+        }
+      }
+
     }
 
   }
@@ -291,7 +418,7 @@ uint64_t correlation_index_lookup() {
   return sum;
 }
 
-void test() {
+void run_workload() {
 
   double init_mem_size = get_memory_mb();
 
@@ -320,15 +447,16 @@ void test() {
   }
 
   timer.toc();
-  std::cout << "elapsed time = " << timer.time_us() << " us" << std::endl;
-  std::cout << "sum = " << sum << std::endl;
   
   double total_mem_size = get_memory_mb();
-  std::cout << "mem size: " << init_mem_size << " MB, " << total_mem_size << " MB." << std::endl;
+
+  std::cout << "ops: " <<  config.query_count_ * 1.0 / timer.time_us() * 1000 << " K ops." << std::endl;
+  std::cout << "memory size: " << init_mem_size << " MB, " << total_mem_size << " MB." << std::endl;
+  std::cout << "sum: " << sum << std::endl;
 }
 
 
 int main(int argc, char *argv[]) {
-
-  test();
+  parse_args(argc, argv);
+  run_workload();
 }

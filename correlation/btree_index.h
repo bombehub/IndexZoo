@@ -7,6 +7,7 @@
 #include "generic_key.h"
 #include "generic_data_table.h"
 #include "tuple_schema.h"
+#include "correlation_common.h"
 
 class BTreeIndex {
 public:
@@ -46,7 +47,7 @@ public:
     }
   }
 
-  void construct(const GenericDataTable *data_table, const TupleSchema &tuple_schema, const size_t column_id) {
+  void construct(const GenericDataTable *data_table, const TupleSchema &tuple_schema, const size_t column_id, const IndexPointerType index_pointer_type) {
 
     size_t capacity = data_table->size();
   
@@ -54,21 +55,41 @@ public:
     
     GenericDataTableIterator iterator(data_table);
     size_t i = 0;
-    while (iterator.has_next()) {
-      auto entry = iterator.next();
-      
-      char *tuple_ptr = entry.key_;
+    
+    if (index_pointer_type == LogicalPointerType) {
 
-      // Uint64 offset = entry.offset_;
+      while (iterator.has_next()) {
+        auto entry = iterator.next();
+        
+        char *tuple_ptr = entry.key_;
 
-      uint64_t pkey = *(uint64_t*)tuple_ptr;
+        uint64_t pkey = *(uint64_t*)tuple_ptr;
 
-      size_t attr_offset = tuple_schema.get_attr_offset(column_id);
-      uint64_t attr_ret = *(uint64_t*)(tuple_ptr + attr_offset);
+        size_t attr_offset = tuple_schema.get_attr_offset(column_id);
+        uint64_t attr_ret = *(uint64_t*)(tuple_ptr + attr_offset);
 
-      columns[i].first = attr_ret;
-      columns[i].second = pkey;
-      i++;
+        columns[i].first = attr_ret;
+        columns[i].second = pkey;
+        i++;
+      }
+
+    } else {
+
+      while (iterator.has_next()) {
+        auto entry = iterator.next();
+        
+        char *tuple_ptr = entry.key_;
+
+        uint64_t offset = entry.offset_;
+
+        size_t attr_offset = tuple_schema.get_attr_offset(column_id);
+        uint64_t attr_ret = *(uint64_t*)(tuple_ptr + attr_offset);
+
+        columns[i].first = attr_ret;
+        columns[i].second = offset;
+        i++;
+      }
+
     }
 
     ASSERT(i == capacity, "incorrect loading");

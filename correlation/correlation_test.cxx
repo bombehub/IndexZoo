@@ -3,6 +3,8 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+#include <unistd.h>
+#include <getopt.h>
 
 #include "fast_random.h"
 #include "time_measurer.h"
@@ -49,10 +51,44 @@ struct Config {
   size_t tuple_count_;
   size_t query_count_;
   AccessType access_type_;
+  bool pkey_pointer_;
   uint64_t param0_;
 };
 
 Config config;
+
+void usage(FILE *out) {
+  fprintf(out,
+          "Command line options : index_benchmark <options> \n"
+          "  -h --help              : print help message \n"
+          "  -a --access_type       : access type \n"
+          "                            -- (0) primary index lookup \n"
+          );
+}
+
+void parser(int argc, char *argv[]) {
+
+  if (argc != 3 && argc != 4) {
+    std::cerr << "usage: " << argv[0] << " tuple_count access_type param" << std::endl;
+    std::cerr << "================" << std::endl;
+    std::cerr << "access_type: " << std::endl;
+    std::cerr << "  [0] pindex(0) + sindex(1), lookup pindex(0)" << std::endl;
+    std::cerr << "  [1] pindex(0) + sindex(1), lookup sindex(1)" << std::endl;
+    std::cerr << "  [2] pindex(0) + sindex(1) + sindex(2), lookup sindex(2)" << std::endl;
+    std::cerr << "  [3] pindex(0) + sindex(1) + cindex(2), lookup cindex(2)" << std::endl;
+
+    exit(EXIT_FAILURE);
+    return;
+  }
+
+  config.tuple_count_ = atoi(argv[1]);
+  config.query_count_ = config.tuple_count_;
+  config.access_type_ = AccessType(atoi(argv[2]));
+  config.param0_ = 2;
+  if (argc == 4) {
+    config.param0_ = atoi(argv[3]);
+  }
+}
 
 void init() {
   // add four uint64_t attributes
@@ -293,25 +329,6 @@ void test() {
 
 
 int main(int argc, char *argv[]) {
-  if (argc != 3 && argc != 4) {
-    std::cerr << "usage: " << argv[0] << " tuple_count access_type param" << std::endl;
-    std::cerr << "================" << std::endl;
-    std::cerr << "access_type: " << std::endl;
-    std::cerr << "  [0] pindex(0) + sindex(1), lookup pindex(0)" << std::endl;
-    std::cerr << "  [1] pindex(0) + sindex(1), lookup sindex(1)" << std::endl;
-    std::cerr << "  [2] pindex(0) + sindex(1) + sindex(2), lookup sindex(2)" << std::endl;
-    std::cerr << "  [3] pindex(0) + sindex(1) + cindex(2), lookup cindex(2)" << std::endl;
-
-    return -1;
-  }
-
-  config.tuple_count_ = atoi(argv[1]);
-  config.query_count_ = config.tuple_count_;
-  config.access_type_ = AccessType(atoi(argv[2]));
-  config.param0_ = 2;
-  if (argc == 4) {
-    config.param0_ = atoi(argv[3]);
-  }
 
   test();
 }

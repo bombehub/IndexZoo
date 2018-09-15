@@ -50,7 +50,7 @@ class CorrelationIndex {
 
       epsilon_ = std::ceil(index_->error_bound_ * 1.0 / density / 2);
 
-      std::cout << "error bound = " << index_->error_bound_ << ", epsilon = " << epsilon_ << std::endl;
+      // std::cout << "error bound = " << index_->error_bound_ << ", epsilon = " << epsilon_ << std::endl;
 
       level_ = level;
     }
@@ -71,7 +71,6 @@ class CorrelationIndex {
 
     void split(CorrelationNode** &new_nodes) {
       ASSERT(children_ == nullptr && children_count_ == 0, "children must be unassigned");
-
 
       outlier_buffer_.clear();
 
@@ -100,14 +99,48 @@ class CorrelationIndex {
       new_nodes = children_;
     }
 
-    void compute() {
+    // if true, then computed. otherwise, all data are in outlier buffer.
+    bool compute() {
+
+      if (offset_span_ <= index_->min_node_size_) {
+
+        auto *container_ptr = index_->container_;
+
+        for (uint64_t i = offset_begin_; i <= offset_end_; ++i) {
+          uint64_t guest = container_ptr[i].guest_;
+          uint64_t host = container_ptr[i].host_;
+          outlier_buffer_[guest] = host;
+        }
+        return false;
+      }
+
       ASSERT(guest_end_ != guest_begin_, "guest_end_ cannot be equal to guest_begin_");
 
       slope_ = (host_end_ - host_begin_) * 1.0 / (guest_end_ - guest_begin_);
       intercept_ = host_begin_ - slope_ * guest_begin_;
 
+      // std::cout << "slope = " << slope_ << ", intercept = " << intercept_ << std::endl;
+      // std::cout << "host: " << host_begin_ << " " << host_end_ << std::endl;
+      // std::cout << "guest: " << guest_begin_ << " " << guest_end_ << std::endl;
+
+      return true;
     }
 
+    inline uint64_t estimate(const uint64_t key) const {
+      return slope_ * key * 1.0 + intercept_;
+    }
+
+    inline void get_bound(const uint64_t key, uint64_t &lhs_key, uint64_t &rhs_key) const {
+      if (key < epsilon_) {
+        lhs_key = 0;
+      } else {
+        lhs_key = key - epsilon_;
+      }
+      lhs_key = key - epsilon_;
+      rhs_key = key + epsilon_;
+    }
+
+    // if true, then pass validation. there's no need to further split this node.
     bool validate() {
       auto *container_ptr = index_->container_;
 
@@ -168,20 +201,6 @@ class CorrelationIndex {
         children_[children_count_ - 1]->lookup(guest_key, ret_lhs_host, ret_rhs_host);
         return;
       }
-    }
-
-    inline uint64_t estimate(const uint64_t key) const {
-      return slope_ * key * 1.0 + intercept_;
-    }
-
-    inline void get_bound(const uint64_t key, uint64_t &lhs_key, uint64_t &rhs_key) const {
-      if (key < epsilon_) {
-        lhs_key = 0;
-      } else {
-        lhs_key = key - epsilon_;
-      }
-      lhs_key = key - epsilon_;
-      rhs_key = key + epsilon_;
     }
 
     inline bool has_children() const {
@@ -316,18 +335,20 @@ public:
         max_level_ = node->get_level();
       }
 
-      node->compute();
+      bool compute_ret = node->compute();
 
-      bool ret = node->validate();
+      if (compute_ret == true) {
 
-      if (ret == false) {
-        CorrelationNode** new_nodes = nullptr;
-        node->split(new_nodes);
-        for (size_t i = 0; i < fanout_; i++) {
-          nodes.push(new_nodes[i]);
+        bool validate_ret = node->validate();
+
+        if (validate_ret == false) {
+          CorrelationNode** new_nodes = nullptr;
+          node->split(new_nodes);
+          for (size_t i = 0; i < fanout_; i++) {
+            nodes.push(new_nodes[i]);
+          }
         }
       }
-
     }
 
     delete[] container_;

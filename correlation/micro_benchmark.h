@@ -12,10 +12,18 @@ public:
 
     double init_mem_size = get_memory_mb();
 
+    TimeMeasurer timer;
+
     init();
+
+    timer.tic();
+    
     build_table();
 
-    TimeMeasurer timer;
+    timer.toc();
+
+    std::cout << "table build time = " << timer.time_ms() << " ms." << std::endl;
+
     timer.tic();
 
     uint64_t sum = 0;
@@ -75,9 +83,16 @@ private:
     for (size_t tuple_id = 0; tuple_id < config_.tuple_count_; ++tuple_id) {
       
       uint64_t attr0 = rand_gen.next<uint64_t>(); // primary key
-      uint64_t attr1 = tuple_id * 3 / 4;
-      uint64_t attr2 = tuple_id * 2 / 5;
+      uint64_t attr1 = 0;
+      if (tuple_id < config_.tuple_count_ * 2 * 1.0 / 3) {
+        attr1 = tuple_id * 2;
+      } else {
+        attr1 = tuple_id * 5;
+      }
+      uint64_t attr2 = tuple_id;
       uint64_t attr3 = rand_gen.next<uint64_t>() % 100;
+
+      // std::cout << attr1 << " " << attr2 << std::endl;
 
       attr0s.push_back(attr0);
       attr1s.push_back(attr1);

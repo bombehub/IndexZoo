@@ -43,6 +43,15 @@ class CorrelationIndex {
       children_ = nullptr;
       children_count_ = 0;
 
+      slope_ = 0.0;
+      intercept_ = 0.0;
+
+      double density = std::abs(offset_span_ * 1.0 / (host_end_ - host_begin_));
+
+      epsilon_ = std::ceil(index_->error_bound_ * 1.0 / density / 2);
+
+      std::cout << "error bound = " << index_->error_bound_ << ", epsilon = " << epsilon_ << std::endl;
+
       level_ = level;
     }
 
@@ -62,6 +71,21 @@ class CorrelationIndex {
 
     void split(CorrelationNode** &new_nodes) {
       ASSERT(children_ == nullptr && children_count_ == 0, "children must be unassigned");
+
+
+      outlier_buffer_.clear();
+
+      auto *container_ptr = index_->container_;
+
+      if (offset_span_ <= index_->min_node_size_) {
+        for (uint64_t i = offset_begin_; i <= offset_end_; ++i) {
+          uint64_t guest = container_ptr[i].guest_;
+          uint64_t host = container_ptr[i].host_;
+          outlier_buffer_[guest] = host;
+        }
+        return;
+      }
+
       children_count_ = index_->fanout_;
       
       children_ = new CorrelationNode*[children_count_];
@@ -69,26 +93,23 @@ class CorrelationIndex {
 
       for (size_t i = 0; i < children_count_ - 1; ++i) {
         children_[i] = new CorrelationNode(index_, offset_begin_ + child_offset_span_ * i, offset_begin_ + child_offset_span_ * (i + 1) - 1, level_ + 1);
-        children_index_[i] = index_->container_[offset_begin_ + child_offset_span_ * (i + 1)].guest_;
+        children_index_[i] = container_ptr[offset_begin_ + child_offset_span_ * (i + 1)].guest_;
       }
       children_[children_count_ - 1] = new CorrelationNode(index_, offset_begin_ + child_offset_span_ * (children_count_ - 1), offset_end_, level_ + 1);
       
       new_nodes = children_;
+    }
 
-      outlier_buffer_.clear();
+    void compute() {
+      ASSERT(guest_end_ != guest_begin_, "guest_end_ cannot be equal to guest_begin_");
+
+      slope_ = (host_end_ - host_begin_) * 1.0 / (guest_end_ - guest_begin_);
+      intercept_ = host_begin_ - slope_ * guest_begin_;
+
     }
 
     bool validate() {
       auto *container_ptr = index_->container_;
-
-      if (offset_span_ <= 10) {
-        for (uint64_t i = offset_begin_; i <= offset_end_; ++i) {
-          uint64_t guest = container_ptr[i].guest_;
-          uint64_t host = container_ptr[i].host_;
-          outlier_buffer_[guest] = host;
-        }
-        return true;
-      }
 
       for (uint64_t i = offset_begin_; i <= offset_end_; ++i) {
         uint64_t guest = container_ptr[i].guest_;
@@ -150,18 +171,17 @@ class CorrelationIndex {
     }
 
     inline uint64_t estimate(const uint64_t key) const {
-      ASSERT(guest_end_ != guest_begin_, "guest_end_ cannot be equal to guest_begin_");
-      return (host_end_ - host_begin_) * 1.0 / (guest_end_ - guest_begin_) * (key - guest_begin_) + host_begin_;
+      return slope_ * key * 1.0 + intercept_;
     }
 
     inline void get_bound(const uint64_t key, uint64_t &lhs_key, uint64_t &rhs_key) const {
-      if (key < index_->error_bound_) {
+      if (key < epsilon_) {
         lhs_key = 0;
       } else {
-        lhs_key = key - index_->error_bound_;
+        lhs_key = key - epsilon_;
       }
-      lhs_key = key - index_->error_bound_;
-      rhs_key = key + index_->error_bound_;
+      lhs_key = key - epsilon_;
+      rhs_key = key + epsilon_;
     }
 
     inline bool has_children() const {
@@ -205,6 +225,10 @@ class CorrelationIndex {
     uint64_t host_begin_; // host_values[offset_begin_]
     uint64_t host_end_; // host_values[offset_end_]
 
+    double slope_;
+    double intercept_;
+
+    double epsilon_;
 
     CorrelationNode **children_;
     size_t children_count_;
@@ -214,13 +238,14 @@ class CorrelationIndex {
   };
 
 public:
-  CorrelationIndex(const size_t fanout = 2, const float error_bound = 0.1, const float outlier_threshold = 0.2) {
+  CorrelationIndex(const size_t fanout, const size_t error_bound, const float outlier_threshold, const size_t min_node_size) {
 
     ASSERT(fanout >= 2, "fanout must be no less than 2");
 
     fanout_ = fanout;
     error_bound_ = error_bound;
     outlier_threshold_ = outlier_threshold;
+    min_node_size_ = min_node_size;
 
     max_level_ = 0;
     node_count_ = 0;
@@ -291,6 +316,8 @@ public:
         max_level_ = node->get_level();
       }
 
+      node->compute();
+
       bool ret = node->validate();
 
       if (ret == false) {
@@ -346,8 +373,9 @@ private:
   size_t size_;
 
   size_t fanout_;
-  float error_bound_;
+  size_t error_bound_;
   float outlier_threshold_;
+  size_t min_node_size_;
 
   CorrelationNode *root_node_;
 

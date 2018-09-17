@@ -7,6 +7,7 @@ if __name__ == "__main__":
   distances = []
   fares = []
   totals = []
+
   with open('/home/yingjun/Downloads/yellow_tripdata_2017-01.csv') as csvfile:
     rows = csv.reader(csvfile, delimiter = ',')
     
@@ -16,14 +17,14 @@ if __name__ == "__main__":
         distances.append(float(row[4]))
         fares.append(float(row[10])) 
         totals.append(float(row[16]))
-      if count > 10000:
+      if count > 10:
         break
       count += 1
 
-  # print(distances)
-  # print(fares)
-  # print(totals)
+  print(distances)
+  print(fares)
+  print(totals)
 
-  plt.plot(distances, fares, 'ro')
+  # plt.plot(distances, fares, 'ro')
   # plt.plot(distances, totals, 'bo')
-  plt.show()
+  # plt.show()

@@ -19,7 +19,6 @@
 #include "correlation_common.h"
 
 #include "micro_benchmark.h"
-#include "tpch_benchmark.h"
 #include "taxi_benchmark.h"
 #include "flight_benchmark.h"
 

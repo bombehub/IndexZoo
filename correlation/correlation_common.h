@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <sstream>
 
 enum IndexPointerType {
   LogicalPointerType = 0,
@@ -31,3 +32,4 @@ struct Config {
   float outlier_threshold_ = 0.2;
   size_t min_node_size_ = 100;
 };
+

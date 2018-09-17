@@ -5,64 +5,22 @@
 class MicroBenchmark : public BaseBenchmark {
 
 public:
-  MicroBenchmark(const Config &config_) : BaseBenchmark(config_) {}
+  MicroBenchmark(const Config &config) : BaseBenchmark(config) {}
   virtual ~MicroBenchmark() {}
-
-  virtual void run_workload() final {
-
-    double init_mem_size = get_memory_mb();
-
-    TimeMeasurer timer;
-
-    init();
-
-    timer.tic();
-    
-    build_table();
-
-    timer.toc();
-
-    std::cout << "table build time = " << timer.time_ms() << " ms." << std::endl;
-
-    timer.tic();
-
-    uint64_t sum = 0;
-    switch (config_.access_type_) {
-      case PrimaryIndexAccess:
-      sum = primary_index_lookup();
-      break;
-      case SecondaryIndexAccess:
-      sum = secondary_index_lookup();
-      break;
-      case BaselineIndexAccess:
-      sum = baseline_index_lookup();
-      break;
-      case CorrelationIndexAccess:
-      sum = correlation_index_lookup();
-      break;
-      default:
-      break;
-    }
-
-    timer.toc();
-    
-    double total_mem_size = get_memory_mb();
-
-    std::cout << "ops: " <<  config_.query_count_ * 1.0 / timer.time_us() * 1000 << " K ops." << std::endl;
-    std::cout << "memory size: " << init_mem_size << " MB, " << total_mem_size << " MB." << std::endl;
-    std::cout << "sum: " << sum << std::endl;
-  }
 
 private:
 
-  void init() {
+  virtual void init() final {
     // add four uint64_t attributes
     tuple_schema_.add_attr(sizeof(uint64_t));
     tuple_schema_.add_attr(sizeof(uint64_t));
     tuple_schema_.add_attr(sizeof(uint64_t));
     tuple_schema_.add_attr(sizeof(uint64_t));
 
-    data_table_.reset(new GenericDataTable(key_size, value_size));
+    key_size_ = sizeof(uint64_t);
+    value_size_ = sizeof(uint64_t) * 3;
+
+    data_table_.reset(new GenericDataTable(key_size_, value_size_));
     primary_index_.reset(new BTreeIndex());
     secondary_index_.reset(new BTreeIndex());
 
@@ -70,15 +28,15 @@ private:
       baseline_index_.reset(new BTreeIndex());
     } else if (config_.access_type_ == CorrelationIndexAccess) {
       correlation_index_.reset(new CorrelationIndex(config_.fanout_, config_.error_bound_, config_.outlier_threshold_, config_.min_node_size_));
-    } 
+    }
   }
 
-  void build_table() {
+  virtual void build_table() final {
 
     FastRandom rand_gen;
 
-    GenericKey tuple_key(key_size);
-    GenericKey tuple_value(value_size);
+    GenericKey tuple_key(key_size_);
+    GenericKey tuple_value(value_size_);
 
     for (size_t tuple_id = 0; tuple_id < config_.tuple_count_; ++tuple_id) {
       
@@ -94,9 +52,9 @@ private:
 
       // std::cout << attr1 << " " << attr2 << std::endl;
 
-      attr0s.push_back(attr0);
-      attr1s.push_back(attr1);
-      attr2s.push_back(attr2);
+      primary_keys_.push_back(attr0);
+      secondary_keys_.push_back(attr1);
+      correlation_keys_.push_back(attr2);
 
       memcpy(tuple_key.raw(), (char*)(&attr0), sizeof(uint64_t));
 
@@ -134,9 +92,31 @@ private:
     }
   }
 
+  virtual void run_queries() final {
+
+    uint64_t sum = 0;
+    switch (config_.access_type_) {
+      case PrimaryIndexAccess:
+      sum = primary_index_lookup();
+      break;
+      case SecondaryIndexAccess:
+      sum = secondary_index_lookup();
+      break;
+      case BaselineIndexAccess:
+      sum = baseline_index_lookup();
+      break;
+      case CorrelationIndexAccess:
+      sum = correlation_index_lookup();
+      break;
+      default:
+      break;
+    }
+    std::cout << "sum: " << sum << std::endl;
+  }
+
   uint64_t primary_index_lookup() {
 
-    auto &keys = attr0s;
+    auto &keys = primary_keys_;
     size_t key_count = keys.size();
 
     uint64_t sum = 0;
@@ -165,7 +145,7 @@ private:
 
   uint64_t secondary_index_lookup() {
 
-    auto &keys = attr1s;
+    auto &keys = secondary_keys_;
     size_t key_count = keys.size();
 
     uint64_t sum = 0;
@@ -222,7 +202,7 @@ private:
 
   uint64_t baseline_index_lookup() {
 
-    auto &keys = attr2s;
+    auto &keys = correlation_keys_;
     size_t key_count = keys.size();
 
     uint64_t sum = 0;
@@ -280,7 +260,7 @@ private:
 
   uint64_t correlation_index_lookup() {
 
-    auto &keys = attr2s;
+    auto &keys = correlation_keys_;
     size_t key_count = keys.size();
 
     uint64_t sum = 0;
@@ -362,11 +342,11 @@ private:
 
 private:
 
-  size_t key_size = sizeof(uint64_t);
-  size_t value_size = sizeof(uint64_t) * 3;
+  size_t key_size_;
+  size_t value_size_;
 
-  std::vector<uint64_t> attr0s;
-  std::vector<uint64_t> attr1s;
-  std::vector<uint64_t> attr2s;
+  std::vector<uint64_t> primary_keys_;
+  std::vector<uint64_t> secondary_keys_;
+  std::vector<uint64_t> correlation_keys_;
 
 };

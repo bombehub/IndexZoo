@@ -19,6 +19,9 @@
 #include "correlation_common.h"
 
 #include "micro_benchmark.h"
+#include "tpch_benchmark.h"
+#include "taxi_benchmark.h"
+#include "flight_benchmark.h"
 
 
 void usage(FILE *out) {
@@ -26,13 +29,18 @@ void usage(FILE *out) {
           "Command line options : index_benchmark <options> \n"
           "  -h --help                : print help message \n"
           "  -a --access              : access type \n"
-          "                              -- (0) primary index lookup \n"
+          "                              -- (0) primary index lookup (default) \n"
           "                              -- (1) secondary index lookup \n"
           "                              -- (2) baseline index lookup \n"
           "                              -- (3) correlation index lookup \n"
           "  -i --index_pointer       : index pointer type \n"
-          "                              -- (0) logical pointer \n"
+          "                              -- (0) logical pointer (default) \n"
           "                              -- (1) physical pointer \n"
+          "  -b --benchmark           : benchmark type \n"
+          "                              -- (0) micro benchmark (default) \n"
+          "                              -- (1) taxi benchmark \n"
+          "                              -- (2) flight benchmark \n"
+          "                              -- (3) TBD \n"
           "  -t --tuple_count         : tuple count \n"
           "  -q --query_count         : query count \n"
           "  -f --fanout              : fanout \n"
@@ -45,6 +53,7 @@ void usage(FILE *out) {
 static struct option opts[] = {
     { "access",              optional_argument, NULL, 'a' },
     { "index_pointer",       optional_argument, NULL, 'i' },
+    { "benchmark",           optional_argument, NULL, 'b' },
     { "tuple_count",         optional_argument, NULL, 't' },
     { "query_count",         optional_argument, NULL, 'q' },
     { "fanout",              optional_argument, NULL, 'f' },
@@ -58,7 +67,7 @@ void parse_args(int argc, char* argv[], Config &config) {
   
   while (1) {
     int idx = 0;
-    int c = getopt_long(argc, argv, "ha:i:t:q:f:e:o:m:", opts, &idx);
+    int c = getopt_long(argc, argv, "ha:i:b:t:q:f:e:o:m:", opts, &idx);
 
     if (c == -1) break;
 
@@ -69,6 +78,10 @@ void parse_args(int argc, char* argv[], Config &config) {
       }
       case 'i': {
         config.index_pointer_type_ = (IndexPointerType)atoi(optarg);
+        break;
+      }
+      case 'b': {
+        config.benchmark_type_ = (BenchmarkType)atoi(optarg);
         break;
       }
       case 't': {
@@ -117,6 +130,22 @@ int main(int argc, char *argv[]) {
 
   Config config;
   parse_args(argc, argv, config);
-  MicroBenchmark bench(config);
-  bench.run_workload();
+  
+  std::unique_ptr<BaseBenchmark> benchmark;
+
+  if (config.benchmark_type_ == MicroBenchmarkType) {
+
+    benchmark.reset(new MicroBenchmark(config));
+
+  } else if (config.benchmark_type_ == TaxiBenchmarkType) {
+
+    benchmark.reset(new TaxiBenchmark(config));
+
+  } else if (config.benchmark_type_ == FlightBenchmarkType) {
+
+    benchmark.reset(new FlightBenchmark(config));
+
+  }
+
+  benchmark->run_workload();
 }

@@ -14,9 +14,16 @@ enum AccessType {
   CorrelationIndexAccess,
 };
 
+enum BenchmarkType {
+  MicroBenchmarkType = 0,
+  TaxiBenchmarkType,
+  FlightBenchmarkType,
+};
+
 struct Config {
   AccessType access_type_ = PrimaryIndexAccess;
   IndexPointerType index_pointer_type_ = LogicalPointerType;
+  BenchmarkType benchmark_type_ = MicroBenchmarkType;
   size_t tuple_count_ = 100000;
   size_t query_count_ = 100000;
   size_t fanout_ = 4;

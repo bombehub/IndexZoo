@@ -50,8 +50,6 @@ class CorrelationIndex {
 
       epsilon_ = std::ceil(index_->error_bound_ * 1.0 / density / 2);
 
-      // std::cout << "error bound = " << index_->error_bound_ << ", epsilon = " << epsilon_ << std::endl;
-
       level_ = level;
     }
 
@@ -76,14 +74,14 @@ class CorrelationIndex {
 
       auto *container_ptr = index_->container_;
 
-      if (offset_span_ <= index_->min_node_size_) {
-        for (uint64_t i = offset_begin_; i <= offset_end_; ++i) {
-          uint64_t guest = container_ptr[i].guest_;
-          uint64_t host = container_ptr[i].host_;
-          outlier_buffer_[guest] = host;
-        }
-        return;
-      }
+      // if (offset_span_ <= index_->min_node_size_) {
+      //   for (uint64_t i = offset_begin_; i <= offset_end_; ++i) {
+      //     uint64_t guest = container_ptr[i].guest_;
+      //     uint64_t host = container_ptr[i].host_;
+      //     outlier_buffer_[guest] = host;
+      //   }
+      //   return;
+      // }
 
       children_count_ = index_->fanout_;
       
@@ -118,10 +116,6 @@ class CorrelationIndex {
 
       slope_ = (host_end_ - host_begin_) * 1.0 / (guest_end_ - guest_begin_);
       intercept_ = host_begin_ - slope_ * guest_begin_;
-
-      // std::cout << "slope = " << slope_ << ", intercept = " << intercept_ << std::endl;
-      // std::cout << "host: " << host_begin_ << " " << host_end_ << std::endl;
-      // std::cout << "guest: " << guest_begin_ << " " << guest_end_ << std::endl;
 
       return true;
     }
@@ -216,6 +210,8 @@ class CorrelationIndex {
       std::cout << "offset: " << offset_begin_ << " " << offset_end_ << std::endl;
       std::cout << "guest: " << guest_begin_ << " " << guest_end_ << std::endl;
       std::cout << "host: " << host_begin_ << " " << host_end_ << std::endl;
+      std::cout << "epsilon: " << epsilon_ << std::endl;
+      std::cout << "slope: " << slope_ << ", intercept: " << intercept_ << std::endl;
       std::cout << "======" << std::endl;
     }
 

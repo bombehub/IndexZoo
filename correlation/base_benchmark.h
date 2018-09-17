@@ -23,7 +23,40 @@ public:
   BaseBenchmark(const Config &config) : config_(config) {}
   virtual ~BaseBenchmark() {}
 
-  virtual void run_workload() = 0;
+  void run_workload() {
+
+    double init_mem_size = get_memory_mb();
+
+    TimeMeasurer timer;
+
+    init();
+
+    timer.tic();
+    
+    build_table();
+
+    timer.toc();
+
+    std::cout << "table build time: " << timer.time_ms() << " ms." << std::endl;
+
+    timer.tic();
+
+    run_queries();
+
+    timer.toc();
+    
+    double total_mem_size = get_memory_mb();
+
+    std::cout << "ops: " <<  config_.query_count_ * 1.0 / timer.time_us() * 1000 << " K ops." << std::endl;
+    std::cout << "memory size: " << init_mem_size << " MB, " << total_mem_size << " MB." << std::endl;
+
+  }
+
+protected:
+
+  virtual void init() = 0;
+  virtual void build_table() = 0;
+  virtual void run_queries() = 0;
 
 protected:
   Config config_;

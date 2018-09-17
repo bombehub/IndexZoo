@@ -39,6 +39,8 @@ int main() {
     ++count;
   }
 
+  std::cout << "count = " << count << std::endl;
+
   src_file.close();
   fclose(dst_file);
 

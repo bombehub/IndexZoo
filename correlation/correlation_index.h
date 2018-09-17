@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <queue>
 
+const double INVALID_DOUBLE = std::numeric_limits<double>::max();
 
 class CorrelationIndex {
 
@@ -43,8 +44,8 @@ class CorrelationIndex {
       children_ = nullptr;
       children_count_ = 0;
 
-      slope_ = 0.0;
-      intercept_ = 0.0;
+      slope_ = INVALID_DOUBLE;
+      intercept_ = INVALID_DOUBLE;
 
       double density = std::abs(offset_span_ * 1.0 / (host_end_ - host_begin_));
 
@@ -74,15 +75,6 @@ class CorrelationIndex {
 
       auto *container_ptr = index_->container_;
 
-      // if (offset_span_ <= index_->min_node_size_) {
-      //   for (uint64_t i = offset_begin_; i <= offset_end_; ++i) {
-      //     uint64_t guest = container_ptr[i].guest_;
-      //     uint64_t host = container_ptr[i].host_;
-      //     outlier_buffer_[guest] = host;
-      //   }
-      //   return;
-      // }
-
       children_count_ = index_->fanout_;
       
       children_ = new CorrelationNode*[children_count_];
@@ -107,7 +99,7 @@ class CorrelationIndex {
         for (uint64_t i = offset_begin_; i <= offset_end_; ++i) {
           uint64_t guest = container_ptr[i].guest_;
           uint64_t host = container_ptr[i].host_;
-          outlier_buffer_[guest] = host;
+          outlier_buffer_.insert( {guest, host} );
         }
         return false;
       }
@@ -150,11 +142,14 @@ class CorrelationIndex {
 
         if (estimate_lhs_host > host || estimate_rhs_host < host) {
           // if not in the range
-          outlier_buffer_[guest] = host;
+          outlier_buffer_.insert( {guest, host} );
         }
       }
       
       if (outlier_buffer_.size() > offset_span_ * index_->outlier_threshold_) {
+
+        std::cout << "validation failed: " << outlier_buffer_.size() << " " << offset_span_ * index_->outlier_threshold_ << std::endl;
+
         return false;
       } else {
         return true;
@@ -162,38 +157,41 @@ class CorrelationIndex {
 
     }
 
-    void lookup(const uint64_t guest_key, uint64_t &ret_lhs_host, uint64_t &ret_rhs_host) const {
+    // return true means have range
+    bool lookup(const uint64_t guest_key, uint64_t &ret_lhs_host, uint64_t &ret_rhs_host, std::vector<uint64_t> &outliers) const {
       if (children_count_ == 0) {
 
         // first check outlier_buffer
-        auto iter = outlier_buffer_.find(guest_key);
-        if (iter != outlier_buffer_.end()) {
+        auto ret = outlier_buffer_.equal_range(guest_key);
+        for (auto it = ret.first; it != ret.second; ++it) {
+          outliers.push_back(it->second);
+        }
 
-          uint64_t host_key = iter->second;
-
-          ret_lhs_host = host_key;
-          ret_rhs_host = host_key;
-
-          return;
-
-        } else {
+        if (slope_ != INVALID_DOUBLE && intercept_ != INVALID_DOUBLE) {
           // estimate the host key via function computation
           uint64_t host_key = estimate(guest_key);
           // get min and max bound based on estimated value
           get_bound(host_key, ret_lhs_host, ret_rhs_host);
 
-          return;
+          return true;
+
+        } else {
+
+          return false;
+
         }
 
       } else {
+        // TODO: accelerate using SIMD
         for (size_t i = 0; i < children_count_ - 1; ++i) {
+          
           if (guest_key < children_index_[i]) {
-            children_[i]->lookup(guest_key, ret_lhs_host, ret_rhs_host);
-            return;
+
+            return children_[i]->lookup(guest_key, ret_lhs_host, ret_rhs_host, outliers);
           }
         }
-        children_[children_count_ - 1]->lookup(guest_key, ret_lhs_host, ret_rhs_host);
-        return;
+
+        return children_[children_count_ - 1]->lookup(guest_key, ret_lhs_host, ret_rhs_host, outliers);
       }
     }
 
@@ -249,7 +247,7 @@ class CorrelationIndex {
     size_t children_count_;
     uint64_t *children_index_;
 
-    std::unordered_map<uint64_t, uint64_t> outlier_buffer_;
+    std::multimap<uint64_t, uint64_t> outlier_buffer_;
   };
 
 public:
@@ -281,9 +279,11 @@ public:
 
   }
 
-  void lookup(const uint64_t guest, uint64_t &ret_lhs_host, uint64_t &ret_rhs_host) {
+  bool lookup(const uint64_t guest_key, uint64_t &ret_lhs_host, uint64_t &ret_rhs_host, std::vector<uint64_t> &outliers) const {
+
     ASSERT(root_node_ != nullptr, "root note cannot be nullptr");
-    root_node_->lookup(guest, ret_lhs_host, ret_rhs_host);
+
+    return root_node_->lookup(guest_key, ret_lhs_host, ret_rhs_host, outliers);
   }
 
   void construct(const GenericDataTable *data_table, const TupleSchema &tuple_schema, const size_t guest_column_id, const size_t host_column_id) {
@@ -353,12 +353,10 @@ public:
 
   void print(const bool verbose = false) const {
 
-    if (verbose == false) { 
+    std::cout << "max level = " << max_level_ << std::endl;
+    std::cout << "node count = " << node_count_ << std::endl;
 
-      std::cout << "max level = " << max_level_ << std::endl;
-      std::cout << "node count = " << node_count_ << std::endl;
-
-    } else {
+    if (verbose == true) {
 
       ASSERT(root_node_ != nullptr, "root note cannot be nullptr");
 

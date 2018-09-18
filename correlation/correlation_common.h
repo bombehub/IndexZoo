@@ -31,6 +31,15 @@ enum QueryType {
   RangeQueryType,
 };
 
+struct CorrelationIndexParams {
+  size_t fanout_ = 4;
+  float error_bound_ = 0.1;
+  float outlier_threshold_ = 0.2;
+  size_t min_node_size_ = 100;
+  size_t max_height_ = 10;
+  ComputeType compute_type_ = InterpolationType;
+};
+
 struct Config {
   AccessType access_type_ = PrimaryIndexAccess;
   IndexPointerType index_pointer_type_ = LogicalPointerType;
@@ -39,14 +48,8 @@ struct Config {
   size_t tuple_count_ = 100000;
   size_t query_count_ = 100000;
   float selectivity_ = 0.1;
-  
-  size_t fanout_ = 4;
-  size_t error_bound_ = 1;
-  float outlier_threshold_ = 0.2;
-  size_t min_node_size_ = 100;
-  size_t max_height_ = 10;
-  ComputeType compute_type_ = InterpolationType;
-
   bool verbose_ = false;
+  
+  CorrelationIndexParams correlation_index_params_;
 };
 

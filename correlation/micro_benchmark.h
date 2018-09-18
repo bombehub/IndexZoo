@@ -40,6 +40,10 @@ private:
     GenericKey tuple_key(key_size_);
     GenericKey tuple_value(value_size_);
 
+    std::ofstream outfile("data.txt");
+
+    if (outfile.is_open() == false) { assert(false); }
+
     for (size_t tuple_id = 0; tuple_id < config_.tuple_count_; ++tuple_id) {
       
       uint64_t attr0 = rand_gen.next<uint64_t>(); // primary key
@@ -49,7 +53,6 @@ private:
       // } else {
       //   attr1 = tuple_id * 5;
       // }
-      // uint64_t attr1 = tuple_id;
 
       double x = tuple_id * 1.0 / config_.tuple_count_ * 12 - 6;
       uint64_t attr1 = uint64_t(1.0 / (1 + exp(-x)) * 10000000);
@@ -58,7 +61,7 @@ private:
       uint64_t attr2 = tuple_id;
       uint64_t attr3 = rand_gen.next<uint64_t>() % 100;
 
-      // std::cout << attr1 << " " << attr2 << std::endl;
+      outfile << attr1 << "," << attr2 << std::endl;
 
       primary_keys_.push_back(attr0);
       secondary_keys_.push_back(attr1);
@@ -91,6 +94,9 @@ private:
       }
 
     }
+
+    outfile.close();
+
   }
 
 };

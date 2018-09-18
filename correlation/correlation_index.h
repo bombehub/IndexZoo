@@ -4,6 +4,7 @@
 #include <map>
 #include <unordered_map>
 #include <queue>
+#include <fstream>
 
 #include "generic_key.h"
 #include "generic_data_table.h"
@@ -37,7 +38,7 @@ class CorrelationIndex {
       offset_begin_ = offset_begin;
       offset_end_ = offset_end;
       offset_span_ = offset_end_ - offset_begin_ + 1;
-      child_offset_span_ = offset_span_ / index_->fanout_;
+      child_offset_span_ = offset_span_ / index_->params_.fanout_;
 
       auto *container_ptr = index_->container_;
       guest_begin_ = container_ptr[offset_begin_].guest_;
@@ -56,7 +57,9 @@ class CorrelationIndex {
 
       // epsilon_ = std::ceil(index_->error_bound_ * 1.0 / density / 2);
 
-      epsilon_ = index_->error_bound_;
+      // epsilon_ = index_->error_bound_;
+
+      epsilon_ = (host_end_ - host_begin_) * index_->params_.error_bound_;
 
       level_ = level;
 
@@ -82,11 +85,8 @@ class CorrelationIndex {
 
       outlier_buffer_.clear();
 
-      // slope_ = INVALID_DOUBLE;
-      // intercept_ = INVALID_DOUBLE;
-
       auto *container_ptr = index_->container_;
-      if (level_ == index_->max_height_ - 1) {
+      if (level_ == index_->params_.max_height_ - 1) {
 
         for (uint64_t i = offset_begin_; i <= offset_end_; ++i) {
           uint64_t guest = container_ptr[i].guest_;
@@ -96,7 +96,7 @@ class CorrelationIndex {
         return;
       }
 
-      children_count_ = index_->fanout_;
+      children_count_ = index_->params_.fanout_;
       
       children_ = new CorrelationNode*[children_count_];
       children_index_ = new uint64_t[children_count_];
@@ -113,7 +113,7 @@ class CorrelationIndex {
     // if true, then computed. otherwise, all data are in outlier buffer.
     bool compute_interpolation() {
 
-      if (offset_span_ <= index_->min_node_size_) {
+      if (offset_span_ <= index_->params_.min_node_size_) {
 
         auto *container_ptr = index_->container_;
 
@@ -137,7 +137,7 @@ class CorrelationIndex {
 
       auto *container_ptr = index_->container_;
 
-      if (offset_span_ <= index_->min_node_size_) {
+      if (offset_span_ <= index_->params_.min_node_size_) {
 
         for (uint64_t i = offset_begin_; i <= offset_end_; ++i) {
           uint64_t guest = container_ptr[i].guest_;
@@ -205,14 +205,14 @@ class CorrelationIndex {
         }
       }
       
-      if (outlier_buffer_.size() > offset_span_ * index_->outlier_threshold_) {
+      if (outlier_buffer_.size() > offset_span_ * index_->params_.outlier_threshold_) {
 
-        std::cout << "validation failed: " << outlier_buffer_.size() << " " << offset_span_ << " " << offset_span_ * index_->outlier_threshold_ << std::endl;
-        std::cout << "param: " << slope_ << " " << intercept_ << std::endl;
+        // std::cout << "validation failed: " << outlier_buffer_.size() << " " << offset_span_ << " " << offset_span_ * index_->outlier_threshold_ << std::endl;
+        // std::cout << "param: " << slope_ << " " << intercept_ << std::endl;
         compute_enabled_ = false;
         return false;
       } else {
-        std::cout << "validation successful!" << std::endl;
+        // std::cout << "validation successful!" << std::endl;
         compute_enabled_ = true;
         return true;
       }
@@ -304,25 +304,36 @@ class CorrelationIndex {
       return children_;
     }
 
-    void print() const {
-      std::cout << "******" << std::endl;
-      std::cout << "level: " << level_ << std::endl;
-      std::cout << "offset span: " << offset_span_ << std::endl;
-      std::cout << "offset: " << offset_begin_ << " " << offset_end_ << std::endl;
-      std::cout << "guest: " << guest_begin_ << " " << guest_end_ << std::endl;
-      std::cout << "host: " << host_begin_ << " " << host_end_ << std::endl;
-      std::cout << "epsilon: " << epsilon_ << std::endl;
-      if (slope_ != INVALID_DOUBLE || intercept_ != INVALID_DOUBLE) {
-        std::cout << "slope: " << slope_ << ", intercept: " << intercept_ << std::endl;
-      } 
-      std::cout << "outlier count: " << outlier_buffer_.size() << std::endl;
-      std::cout << "leaf node: " << (children_count_ == 0) << std::endl;
-      std::cout << "======" << std::endl;
+    void print(std::ofstream &outfile) const {
+
+      if (slope_ != INVALID_DOUBLE && intercept_ != INVALID_DOUBLE) {
+        outfile << level_ << "," 
+                << guest_begin_ << "," 
+                << guest_end_ << "," 
+                << host_begin_ << "," 
+                << host_end_ << "," 
+                << offset_span_ << "," 
+                << epsilon_ << "," 
+                << slope_ << "," 
+                << intercept_ << "," 
+                << outlier_buffer_.size() << ","
+                << (children_count_ == 0) << ","
+                << compute_enabled_
+                << std::endl;
+      } else {
+        outfile << level_ << "," 
+                << guest_begin_ << "," 
+                << guest_end_ << "," 
+                << epsilon_ << ",NA,NA," 
+                << outlier_buffer_.size() << ","
+                << (children_count_ == 0) << ","
+                << compute_enabled_
+                << std::endl;
+      }
+      
     }
 
-    size_t get_level() const {
-      return level_;
-    }
+    inline size_t get_level() const { return level_; }
 
   private:
 
@@ -359,16 +370,11 @@ class CorrelationIndex {
   };
 
 public:
-  CorrelationIndex(const size_t fanout, const size_t error_bound, const float outlier_threshold, const size_t min_node_size, const size_t max_height, const ComputeType compute_type) {
+  CorrelationIndex(const CorrelationIndexParams &params) {
 
-    ASSERT(fanout >= 2, "fanout must be no less than 2");
+    ASSERT(params.fanout_ >= 2, "fanout must be no less than 2");
 
-    fanout_ = fanout;
-    error_bound_ = error_bound;
-    outlier_threshold_ = outlier_threshold;
-    min_node_size_ = min_node_size;
-    max_height_ = max_height;
-    compute_type_ = compute_type;
+    params_ = params;
 
     max_level_ = 0;
     node_count_ = 0;
@@ -449,7 +455,7 @@ public:
       }
 
       bool compute_ret;
-      if (compute_type_ == InterpolationType) {
+      if (params_.compute_type_ == InterpolationType) {
         compute_ret = node->compute_interpolation();
       } else {
         compute_ret = node->compute_regression();
@@ -463,7 +469,7 @@ public:
           CorrelationNode** new_nodes = nullptr;
           node->split(new_nodes);
           if (new_nodes != nullptr) {
-            for (size_t i = 0; i < fanout_; i++) {
+            for (size_t i = 0; i < params_.fanout_; i++) {
               nodes.push(new_nodes[i]);
             }
           }
@@ -482,6 +488,10 @@ public:
 
     if (verbose == true) {
 
+      std::ofstream outfile("index.txt");
+
+      if (outfile.is_open() == false) { assert(false); }
+
       ASSERT(root_node_ != nullptr, "root note cannot be nullptr");
 
       std::queue<CorrelationNode*> nodes;
@@ -492,16 +502,18 @@ public:
         auto *node = nodes.front();
         nodes.pop();
 
-        node->print();
+        node->print(outfile);
 
         CorrelationNode** next_nodes = node->get_children();
 
         if (next_nodes != nullptr) {
-          for (size_t i = 0; i < fanout_; ++i) {
+          for (size_t i = 0; i < params_.fanout_; ++i) {
             nodes.push(next_nodes[i]);
           }
         }
       }
+
+      outfile.close();
     }
 
   }
@@ -511,14 +523,7 @@ private:
   AttributePair *container_;
   size_t size_;
 
-  //=====configurations======
-  size_t fanout_;
-  size_t error_bound_;
-  float outlier_threshold_;
-  size_t min_node_size_;
-  size_t max_height_;
-  ComputeType compute_type_;
-  ////////////////////////////  
+  CorrelationIndexParams params_;
 
   CorrelationNode *root_node_;
 

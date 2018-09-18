@@ -68,7 +68,7 @@ private:
     if (config_.access_type_ == BaselineIndexAccess) {
       baseline_index_.reset(new BTreeIndex());
     } else if (config_.access_type_ == CorrelationIndexAccess) {
-      correlation_index_.reset(new CorrelationIndex(config_.fanout_, config_.error_bound_, config_.outlier_threshold_, config_.min_node_size_, config_.max_height_, config_.compute_type_));
+      correlation_index_.reset(new CorrelationIndex(config_.correlation_index_params_));
     }
   }
 
@@ -89,7 +89,7 @@ private:
 
   void run_queries() {
 
-    if (config_.query_type_ = PointQueryType) {
+    if (config_.query_type_ == PointQueryType) {
       // point query
       uint64_t sum = 0;
       switch (config_.access_type_) {
@@ -128,6 +128,7 @@ private:
         default:
         break;
       }
+      std::cout << "sum: " << sum << std::endl;
     }
   }
 
@@ -333,8 +334,11 @@ private:
     FastRandom rand_gen;
     for (size_t query_id = 0; query_id < config_.query_count_; ++query_id) {
 
-      uint64_t lhs_key = keys.at(rand_gen.next_uniform() * (1 - config_.selectivity_) * key_count);
-      uint64_t rhs_key = keys.at(lhs_key + config_.selectivity_ * key_count);
+      size_t lhs_key_id = rand_gen.next_uniform() * (1 - config_.selectivity_) * key_count;
+      size_t rhs_key_id = lhs_key_id + config_.selectivity_ * key_count;
+
+      uint64_t lhs_key = keys.at(lhs_key_id);
+      uint64_t rhs_key = keys.at(rhs_key_id);
 
       std::vector<uint64_t> offsets;
 
@@ -365,10 +369,11 @@ private:
 
       for (size_t query_id = 0; query_id < config_.query_count_; ++query_id) {
 
-        // uint64_t key = keys.at(rand_gen.next<uint64_t>() % key_count);
+        size_t lhs_key_id = rand_gen.next_uniform() * (1 - config_.selectivity_) * key_count;
+        size_t rhs_key_id = lhs_key_id + config_.selectivity_ * key_count;
 
-        uint64_t lhs_key = keys.at(rand_gen.next_uniform() * (1 - config_.selectivity_) * key_count);
-        uint64_t rhs_key = keys.at(lhs_key + config_.selectivity_ * key_count);
+        uint64_t lhs_key = keys.at(lhs_key_id);
+        uint64_t rhs_key = keys.at(rhs_key_id);
 
         std::vector<uint64_t> pkeys;
         
@@ -391,8 +396,11 @@ private:
 
       for (size_t query_id = 0; query_id < config_.query_count_; ++query_id) {
 
-        uint64_t lhs_key = keys.at(rand_gen.next_uniform() * (1 - config_.selectivity_) * key_count);
-        uint64_t rhs_key = keys.at(lhs_key + config_.selectivity_ * key_count);
+        size_t lhs_key_id = rand_gen.next_uniform() * (1 - config_.selectivity_) * key_count;
+        size_t rhs_key_id = lhs_key_id + config_.selectivity_ * key_count;
+
+        uint64_t lhs_key = keys.at(lhs_key_id);
+        uint64_t rhs_key = keys.at(rhs_key_id);
 
         std::vector<uint64_t> offsets;
         
@@ -433,8 +441,11 @@ private:
 
       for (size_t query_id = 0; query_id < config_.query_count_; ++query_id) {
 
-        uint64_t lhs_key = keys.at(rand_gen.next_uniform() * (1 - config_.selectivity_) * key_count);
-        uint64_t rhs_key = keys.at(lhs_key + config_.selectivity_ * key_count);
+        size_t lhs_key_id = rand_gen.next_uniform() * (1 - config_.selectivity_) * key_count;
+        size_t rhs_key_id = lhs_key_id + config_.selectivity_ * key_count;
+
+        uint64_t lhs_key = keys.at(lhs_key_id);
+        uint64_t rhs_key = keys.at(rhs_key_id);
 
         std::vector<std::pair<uint64_t, uint64_t>> host_key_ranges;
         std::vector<uint64_t> outliers;
@@ -477,8 +488,11 @@ private:
 
       for (size_t query_id = 0; query_id < config_.query_count_; ++query_id) {
 
-        uint64_t lhs_key = keys.at(rand_gen.next_uniform() * (1 - config_.selectivity_) * key_count);
-        uint64_t rhs_key = keys.at(lhs_key + config_.selectivity_ * key_count);
+        size_t lhs_key_id = rand_gen.next_uniform() * (1 - config_.selectivity_) * key_count;
+        size_t rhs_key_id = lhs_key_id + config_.selectivity_ * key_count;
+
+        uint64_t lhs_key = keys.at(lhs_key_id);
+        uint64_t rhs_key = keys.at(rhs_key_id);
 
         std::vector<std::pair<uint64_t, uint64_t>> host_key_ranges;
         std::vector<uint64_t> outliers;

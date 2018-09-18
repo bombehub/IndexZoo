@@ -98,7 +98,7 @@ void parse_args(int argc, char* argv[], Config &config) {
         break;
       }
       case 'c': {
-        config.compute_type_ = (ComputeType)atoi(optarg);
+        config.correlation_index_params_.compute_type_ = (ComputeType)atoi(optarg);
         break;
       }
       case 'u': {
@@ -118,23 +118,23 @@ void parse_args(int argc, char* argv[], Config &config) {
         break;
       }
       case 'f': {
-        config.fanout_ = atoi(optarg);
+        config.correlation_index_params_.fanout_ = atoi(optarg);
         break;
       }
       case 'e': {
-        config.error_bound_ = atoi(optarg);
+        config.correlation_index_params_.error_bound_ = atof(optarg);
         break;
       }
       case 'o': {
-        config.outlier_threshold_ = atof(optarg);
+        config.correlation_index_params_.outlier_threshold_ = atof(optarg);
         break;
       }
       case 'n': {
-        config.min_node_size_ = atoi(optarg);
+        config.correlation_index_params_.min_node_size_ = atoi(optarg);
         break;
       }
       case 'm': {
-        config.max_height_ = atoi(optarg);
+        config.correlation_index_params_.max_height_ = atoi(optarg);
         break;
       }
       case 'v': {

@@ -28,3 +28,4 @@ if __name__ == "__main__":
   # plt.plot(distances, fares, 'ro')
   # plt.plot(distances, totals, 'bo')
   # plt.show()
+  

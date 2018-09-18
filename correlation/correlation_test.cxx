@@ -40,12 +40,17 @@ void usage(FILE *out) {
           "                              -- (1) taxi benchmark \n"
           "                              -- (2) flight benchmark \n"
           "                              -- (3) TBD \n"
+          "  -c --compute             : compute type \n"
+          "                              -- (0) interpolation (default) \n"
+          "                              -- (1) regression \n"
           "  -t --tuple_count         : tuple count \n"
           "  -q --query_count         : query count \n"
           "  -f --fanout              : fanout \n"
           "  -e --error_bound         : error bound \n"
           "  -o --outlier_threshold   : outlier threshold \n"
-          "  -m --min_node_size       : min node size \n"
+          "  -n --min_node_size       : min node size \n"
+          "  -m --max_height          : max height \n"
+          "  -v --verbose             : verbose \n"
   );
 }
 
@@ -53,12 +58,15 @@ static struct option opts[] = {
     { "access",              optional_argument, NULL, 'a' },
     { "index_pointer",       optional_argument, NULL, 'i' },
     { "benchmark",           optional_argument, NULL, 'b' },
+    { "compute",             optional_argument, NULL, 'c' },
     { "tuple_count",         optional_argument, NULL, 't' },
     { "query_count",         optional_argument, NULL, 'q' },
     { "fanout",              optional_argument, NULL, 'f' },
     { "error_bound",         optional_argument, NULL, 'e' },
     { "outlier_threshold",   optional_argument, NULL, 'o' },
-    { "min_node_size",       optional_argument, NULL, 'm' },
+    { "min_node_size",       optional_argument, NULL, 'n' },
+    { "max_height",          optional_argument, NULL, 'm' },
+    { "verbose",             optional_argument, NULL, 'v' },
     { NULL, 0, NULL, 0 }
 };
 
@@ -66,7 +74,7 @@ void parse_args(int argc, char* argv[], Config &config) {
   
   while (1) {
     int idx = 0;
-    int c = getopt_long(argc, argv, "ha:i:b:t:q:f:e:o:m:", opts, &idx);
+    int c = getopt_long(argc, argv, "hva:i:b:c:t:q:f:e:o:n:m:", opts, &idx);
 
     if (c == -1) break;
 
@@ -81,6 +89,10 @@ void parse_args(int argc, char* argv[], Config &config) {
       }
       case 'b': {
         config.benchmark_type_ = (BenchmarkType)atoi(optarg);
+        break;
+      }
+      case 'c': {
+        config.compute_type_ = (ComputeType)atoi(optarg);
         break;
       }
       case 't': {
@@ -103,8 +115,16 @@ void parse_args(int argc, char* argv[], Config &config) {
         config.outlier_threshold_ = atof(optarg);
         break;
       }
-      case 'm': {
+      case 'n': {
         config.min_node_size_ = atoi(optarg);
+        break;
+      }
+      case 'm': {
+        config.max_height_ = atoi(optarg);
+        break;
+      }
+      case 'v': {
+        config.verbose_ = true;
         break;
       }
       case 'h': {

@@ -5,6 +5,11 @@
 #include <unordered_map>
 #include <queue>
 
+#include "generic_key.h"
+#include "generic_data_table.h"
+#include "tuple_schema.h"
+#include "correlation_common.h"
+
 const double INVALID_DOUBLE = std::numeric_limits<double>::max();
 
 class CorrelationIndex {
@@ -47,11 +52,15 @@ class CorrelationIndex {
       slope_ = INVALID_DOUBLE;
       intercept_ = INVALID_DOUBLE;
 
-      double density = std::abs(offset_span_ * 1.0 / (host_end_ - host_begin_));
+      // double density = std::abs(offset_span_ * 1.0 / (host_end_ - host_begin_));
 
-      epsilon_ = std::ceil(index_->error_bound_ * 1.0 / density / 2);
+      // epsilon_ = std::ceil(index_->error_bound_ * 1.0 / density / 2);
+
+      epsilon_ = index_->error_bound_;
 
       level_ = level;
+
+      compute_enabled_ = false;
     }
 
     ~CorrelationNode() {
@@ -73,7 +82,19 @@ class CorrelationIndex {
 
       outlier_buffer_.clear();
 
+      // slope_ = INVALID_DOUBLE;
+      // intercept_ = INVALID_DOUBLE;
+
       auto *container_ptr = index_->container_;
+      if (level_ == index_->max_height_ - 1) {
+
+        for (uint64_t i = offset_begin_; i <= offset_end_; ++i) {
+          uint64_t guest = container_ptr[i].guest_;
+          uint64_t host = container_ptr[i].host_;
+          outlier_buffer_.insert( {guest, host} );
+        }
+        return;
+      }
 
       children_count_ = index_->fanout_;
       
@@ -90,7 +111,7 @@ class CorrelationIndex {
     }
 
     // if true, then computed. otherwise, all data are in outlier buffer.
-    bool compute() {
+    bool compute_interpolation() {
 
       if (offset_span_ <= index_->min_node_size_) {
 
@@ -112,6 +133,41 @@ class CorrelationIndex {
       return true;
     }
 
+    bool compute_regression() {
+
+      auto *container_ptr = index_->container_;
+
+      if (offset_span_ <= index_->min_node_size_) {
+
+        for (uint64_t i = offset_begin_; i <= offset_end_; ++i) {
+          uint64_t guest = container_ptr[i].guest_;
+          uint64_t host = container_ptr[i].host_;
+          outlier_buffer_.insert( {guest, host} );
+        }
+        return false;
+      }
+
+      double guest_avg = 0.0;
+      double host_avg = 0.0;
+      for (uint64_t i = offset_begin_; i <= offset_end_; ++i) {
+        guest_avg += container_ptr[i].guest_;
+        host_avg += container_ptr[i].host_;
+      }
+      guest_avg = guest_avg * 1.0 / offset_span_;
+      host_avg = host_avg * 1.0 / offset_span_;
+
+      double upper = 0.0;
+      double lower = 0.0;
+      for (uint64_t i = offset_begin_; i <= offset_end_; ++i) {
+        upper += (container_ptr[i].guest_ - guest_avg) * (container_ptr[i].host_ - host_avg);
+        lower += (container_ptr[i].guest_ - guest_avg) * (container_ptr[i].guest_ - guest_avg);
+      }
+      slope_ = upper * 1.0 / lower;
+      intercept_ = host_avg - slope_ * guest_avg;
+
+      return true;
+    }
+
     inline uint64_t estimate(const uint64_t key) const {
       return slope_ * key * 1.0 + intercept_;
     }
@@ -122,12 +178,14 @@ class CorrelationIndex {
       } else {
         lhs_key = key - epsilon_;
       }
-      lhs_key = key - epsilon_;
       rhs_key = key + epsilon_;
     }
 
     // if true, then pass validation. there's no need to further split this node.
     bool validate() {
+      
+      assert(outlier_buffer_.size() == 0);
+
       auto *container_ptr = index_->container_;
 
       for (uint64_t i = offset_begin_; i <= offset_end_; ++i) {
@@ -142,16 +200,20 @@ class CorrelationIndex {
 
         if (estimate_lhs_host > host || estimate_rhs_host < host) {
           // if not in the range
+          // std::cout << estimate_lhs_host << " " << host << " " << estimate_rhs_host << std::endl;
           outlier_buffer_.insert( {guest, host} );
         }
       }
       
       if (outlier_buffer_.size() > offset_span_ * index_->outlier_threshold_) {
 
-        std::cout << "validation failed: " << outlier_buffer_.size() << " " << offset_span_ * index_->outlier_threshold_ << std::endl;
-
+        std::cout << "validation failed: " << outlier_buffer_.size() << " " << offset_span_ << " " << offset_span_ * index_->outlier_threshold_ << std::endl;
+        std::cout << "param: " << slope_ << " " << intercept_ << std::endl;
+        compute_enabled_ = false;
         return false;
       } else {
+        std::cout << "validation successful!" << std::endl;
+        compute_enabled_ = true;
         return true;
       }
 
@@ -160,6 +222,7 @@ class CorrelationIndex {
     // return true means have range
     bool lookup(const uint64_t guest_key, uint64_t &ret_lhs_host, uint64_t &ret_rhs_host, std::vector<uint64_t> &outliers) const {
       if (children_count_ == 0) {
+        // this is leaf node. search here.
 
         // first check outlier_buffer
         auto ret = outlier_buffer_.equal_range(guest_key);
@@ -167,7 +230,7 @@ class CorrelationIndex {
           outliers.push_back(it->second);
         }
 
-        if (slope_ != INVALID_DOUBLE && intercept_ != INVALID_DOUBLE) {
+        if (compute_enabled_ == true) {
           // estimate the host key via function computation
           uint64_t host_key = estimate(guest_key);
           // get min and max bound based on estimated value
@@ -204,12 +267,18 @@ class CorrelationIndex {
     }
 
     void print() const {
+      std::cout << "******" << std::endl;
+      std::cout << "level: " << level_ << std::endl;
       std::cout << "offset span: " << offset_span_ << std::endl;
       std::cout << "offset: " << offset_begin_ << " " << offset_end_ << std::endl;
       std::cout << "guest: " << guest_begin_ << " " << guest_end_ << std::endl;
       std::cout << "host: " << host_begin_ << " " << host_end_ << std::endl;
       std::cout << "epsilon: " << epsilon_ << std::endl;
-      std::cout << "slope: " << slope_ << ", intercept: " << intercept_ << std::endl;
+      if (slope_ != INVALID_DOUBLE || intercept_ != INVALID_DOUBLE) {
+        std::cout << "slope: " << slope_ << ", intercept: " << intercept_ << std::endl;
+      } 
+      std::cout << "outlier count: " << outlier_buffer_.size() << std::endl;
+      std::cout << "leaf node: " << (children_count_ == 0) << std::endl;
       std::cout << "======" << std::endl;
     }
 
@@ -240,6 +309,7 @@ class CorrelationIndex {
 
     double slope_;
     double intercept_;
+    bool compute_enabled_;
 
     double epsilon_;
 
@@ -251,7 +321,7 @@ class CorrelationIndex {
   };
 
 public:
-  CorrelationIndex(const size_t fanout, const size_t error_bound, const float outlier_threshold, const size_t min_node_size) {
+  CorrelationIndex(const size_t fanout, const size_t error_bound, const float outlier_threshold, const size_t min_node_size, const size_t max_height, const ComputeType compute_type) {
 
     ASSERT(fanout >= 2, "fanout must be no less than 2");
 
@@ -259,6 +329,8 @@ public:
     error_bound_ = error_bound;
     outlier_threshold_ = outlier_threshold;
     min_node_size_ = min_node_size;
+    max_height_ = max_height;
+    compute_type_ = compute_type;
 
     max_level_ = 0;
     node_count_ = 0;
@@ -331,7 +403,12 @@ public:
         max_level_ = node->get_level();
       }
 
-      bool compute_ret = node->compute();
+      bool compute_ret;
+      if (compute_type_ == InterpolationType) {
+        compute_ret = node->compute_interpolation();
+      } else {
+        compute_ret = node->compute_regression();
+      }
 
       if (compute_ret == true) {
 
@@ -340,8 +417,10 @@ public:
         if (validate_ret == false) {
           CorrelationNode** new_nodes = nullptr;
           node->split(new_nodes);
-          for (size_t i = 0; i < fanout_; i++) {
-            nodes.push(new_nodes[i]);
+          if (new_nodes != nullptr) {
+            for (size_t i = 0; i < fanout_; i++) {
+              nodes.push(new_nodes[i]);
+            }
           }
         }
       }
@@ -387,10 +466,14 @@ private:
   AttributePair *container_;
   size_t size_;
 
+  //=====configurations======
   size_t fanout_;
   size_t error_bound_;
   float outlier_threshold_;
   size_t min_node_size_;
+  size_t max_height_;
+  ComputeType compute_type_;
+  ////////////////////////////  
 
   CorrelationNode *root_node_;
 

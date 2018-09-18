@@ -49,6 +49,7 @@ private:
       // } else {
       //   attr1 = tuple_id * 5;
       // }
+      // uint64_t attr1 = tuple_id;
 
       double x = tuple_id * 1.0 / config_.tuple_count_ * 12 - 6;
       uint64_t attr1 = uint64_t(1.0 / (1 + exp(-x)) * 10000000);

@@ -68,7 +68,7 @@ private:
     if (config_.access_type_ == BaselineIndexAccess) {
       baseline_index_.reset(new BTreeIndex());
     } else if (config_.access_type_ == CorrelationIndexAccess) {
-      correlation_index_.reset(new CorrelationIndex(config_.fanout_, config_.error_bound_, config_.outlier_threshold_, config_.min_node_size_));
+      correlation_index_.reset(new CorrelationIndex(config_.fanout_, config_.error_bound_, config_.outlier_threshold_, config_.min_node_size_, config_.max_height_, config_.compute_type_));
     }
   }
 
@@ -78,7 +78,7 @@ private:
       baseline_index_->construct(data_table_.get(), tuple_schema_, correlation_column_id_, config_.index_pointer_type_);
     } else if (config_.access_type_ == CorrelationIndexAccess) {
       correlation_index_->construct(data_table_.get(), tuple_schema_, correlation_column_id_, secondary_column_id_);
-      correlation_index_->print(true);
+      correlation_index_->print(config_.verbose_);
     }
 
   }

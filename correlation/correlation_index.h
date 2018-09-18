@@ -258,6 +258,44 @@ class CorrelationIndex {
       }
     }
 
+    void range_lookup(const uint64_t guest_lhs_key, const uint64_t guest_rhs_key, std::vector<std::pair<uint64_t, uint64_t>> &ret_host_ranges, std::vector<uint64_t> &outliers) const {
+      // if (children_count_ == 0) {
+      //   // this is leaf node. search here.
+
+      //   // first check outlier_buffer
+      //   auto ret = outlier_buffer_.equal_range(guest_key);
+      //   for (auto it = ret.first; it != ret.second; ++it) {
+      //     outliers.push_back(it->second);
+      //   }
+
+      //   if (compute_enabled_ == true) {
+      //     // estimate the host key via function computation
+      //     uint64_t host_key = estimate(guest_key);
+      //     // get min and max bound based on estimated value
+      //     get_bound(host_key, ret_lhs_host, ret_rhs_host);
+
+      //     return true;
+
+      //   } else {
+
+      //     return false;
+
+      //   }
+
+      // } else {
+      //   // TODO: accelerate using SIMD
+      //   for (size_t i = 0; i < children_count_ - 1; ++i) {
+          
+      //     if (guest_key < children_index_[i]) {
+
+      //       return children_[i]->lookup(guest_key, ret_lhs_host, ret_rhs_host, outliers);
+      //     }
+      //   }
+
+      //   return children_[children_count_ - 1]->lookup(guest_key, ret_lhs_host, ret_rhs_host, outliers);
+      // }
+    }
+
     inline bool has_children() const {
       return (children_ != nullptr);
     }
@@ -358,11 +396,11 @@ public:
     return root_node_->lookup(guest_key, ret_lhs_host, ret_rhs_host, outliers);
   }
 
-  bool range_lookup(const uint64_t guest_lhs_key, const uint64_t guest_rhs_key, uint64_t &ret_lhs_host, uint64_t &ret_rhs_host, std::vector<uint64_t> &outliers) const {
+  void range_lookup(const uint64_t guest_lhs_key, const uint64_t guest_rhs_key, std::vector<std::pair<uint64_t, uint64_t>> &ret_host_ranges, std::vector<uint64_t> &outliers) const {
 
     ASSERT(root_node_ != nullptr, "root note cannot be nullptr");
 
-    return root_node_->lookup(guest_lhs_key, ret_lhs_host, ret_rhs_host, outliers);
+    root_node_->range_lookup(guest_lhs_key, guest_rhs_key, ret_host_ranges, outliers);
   }
 
   void construct(const GenericDataTable *data_table, const TupleSchema &tuple_schema, const size_t guest_column_id, const size_t host_column_id) {

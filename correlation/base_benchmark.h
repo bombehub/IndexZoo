@@ -433,19 +433,19 @@ private:
 
       for (size_t query_id = 0; query_id < config_.query_count_; ++query_id) {
 
-        uint64_t key = keys.at(rand_gen.next<uint64_t>() % key_count);
+        uint64_t lhs_key = keys.at(rand_gen.next_uniform() * (1 - config_.selectivity_) * key_count);
+        uint64_t rhs_key = keys.at(lhs_key + config_.selectivity_ * key_count);
 
-        uint64_t lhs_host_key = 0;
-        uint64_t rhs_host_key = 0;
+        std::vector<std::pair<uint64_t, uint64_t>> host_key_ranges;
         std::vector<uint64_t> outliers;
 
         // find host key range
-        bool ret = correlation_index_->lookup(key, lhs_host_key, rhs_host_key, outliers);
+        correlation_index_->range_lookup(lhs_key, rhs_key, host_key_ranges, outliers);
 
         std::vector<uint64_t> pkeys;
 
-        if (ret == true) {
-          secondary_index_->range_lookup(lhs_host_key, rhs_host_key, pkeys); 
+        for (auto host_key_range : host_key_ranges) {
+          secondary_index_->range_lookup(host_key_range.first, host_key_range.second, pkeys); 
         }
         if (outliers.size() != 0) {
           secondary_index_->lookup(outliers, pkeys);
@@ -463,7 +463,7 @@ private:
           size_t correlation_column_offset = tuple_schema_.get_attr_offset(correlation_column_id_);
           uint64_t correlation_column_ret = *(uint64_t*)(value + correlation_column_offset);
 
-          if (correlation_column_ret == key) {
+          if (correlation_column_ret >= lhs_key && correlation_column_ret <= rhs_key) {
             size_t read_column_offset = tuple_schema_.get_attr_offset(read_column_id_);
             uint64_t read_column_ret = *(uint64_t*)(value + read_column_offset);
 
@@ -477,19 +477,19 @@ private:
 
       for (size_t query_id = 0; query_id < config_.query_count_; ++query_id) {
 
-        uint64_t key = keys.at(rand_gen.next<uint64_t>() % key_count);
+        uint64_t lhs_key = keys.at(rand_gen.next_uniform() * (1 - config_.selectivity_) * key_count);
+        uint64_t rhs_key = keys.at(lhs_key + config_.selectivity_ * key_count);
 
-        uint64_t lhs_host_key = 0;
-        uint64_t rhs_host_key = 0;
+        std::vector<std::pair<uint64_t, uint64_t>> host_key_ranges;
         std::vector<uint64_t> outliers;
 
         // find host key range
-        bool ret = correlation_index_->lookup(key, lhs_host_key, rhs_host_key, outliers);
+        correlation_index_->range_lookup(lhs_key, rhs_key, host_key_ranges, outliers);
 
         std::vector<uint64_t> offsets;
 
-        if (ret == true) {
-          secondary_index_->range_lookup(lhs_host_key, rhs_host_key, offsets);
+        for (auto host_key_range : host_key_ranges) {
+          secondary_index_->range_lookup(host_key_range.first, host_key_range.second, offsets);
         }
         if (outliers.size() != 0) {
           secondary_index_->lookup(outliers, offsets);
@@ -501,7 +501,7 @@ private:
           size_t correlation_column_offset = tuple_schema_.get_attr_offset(correlation_column_id_);
           uint64_t correlation_column_ret = *(uint64_t*)(value + correlation_column_offset);
 
-          if (correlation_column_ret == key) {
+          if (correlation_column_ret >= lhs_key && correlation_column_ret <= rhs_key) {
             size_t read_column_offset = tuple_schema_.get_attr_offset(read_column_id_);
             uint64_t read_column_ret = *(uint64_t*)(value + read_column_offset);
 

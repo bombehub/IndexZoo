@@ -43,6 +43,10 @@ void usage(FILE *out) {
           "  -c --compute             : compute type \n"
           "                              -- (0) interpolation (default) \n"
           "                              -- (1) regression \n"
+          "  -u --query               : query type \n"
+          "                              -- (0) point (default) \n"
+          "                              -- (1) range \n"
+          "  -s --selectivity         : selectivity for range query \n"
           "  -t --tuple_count         : tuple count \n"
           "  -q --query_count         : query count \n"
           "  -f --fanout              : fanout \n"
@@ -59,6 +63,8 @@ static struct option opts[] = {
     { "index_pointer",       optional_argument, NULL, 'i' },
     { "benchmark",           optional_argument, NULL, 'b' },
     { "compute",             optional_argument, NULL, 'c' },
+    { "query",               optional_argument, NULL, 'u' },
+    { "selectivity",         optional_argument, NULL, 's' },
     { "tuple_count",         optional_argument, NULL, 't' },
     { "query_count",         optional_argument, NULL, 'q' },
     { "fanout",              optional_argument, NULL, 'f' },
@@ -74,7 +80,7 @@ void parse_args(int argc, char* argv[], Config &config) {
   
   while (1) {
     int idx = 0;
-    int c = getopt_long(argc, argv, "hva:i:b:c:t:q:f:e:o:n:m:", opts, &idx);
+    int c = getopt_long(argc, argv, "hva:i:b:c:t:q:s:f:e:o:n:m:u:", opts, &idx);
 
     if (c == -1) break;
 
@@ -93,6 +99,14 @@ void parse_args(int argc, char* argv[], Config &config) {
       }
       case 'c': {
         config.compute_type_ = (ComputeType)atoi(optarg);
+        break;
+      }
+      case 'u': {
+        config.query_type_ = (QueryType)atoi(optarg);
+        break;
+      }
+      case 's': {
+        config.selectivity_ = atof(optarg);
         break;
       }
       case 't': {

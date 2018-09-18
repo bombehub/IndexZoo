@@ -358,6 +358,13 @@ public:
     return root_node_->lookup(guest_key, ret_lhs_host, ret_rhs_host, outliers);
   }
 
+  bool range_lookup(const uint64_t guest_lhs_key, const uint64_t guest_rhs_key, uint64_t &ret_lhs_host, uint64_t &ret_rhs_host, std::vector<uint64_t> &outliers) const {
+
+    ASSERT(root_node_ != nullptr, "root note cannot be nullptr");
+
+    return root_node_->lookup(guest_lhs_key, ret_lhs_host, ret_rhs_host, outliers);
+  }
+
   void construct(const GenericDataTable *data_table, const TupleSchema &tuple_schema, const size_t guest_column_id, const size_t host_column_id) {
 
     size_ = data_table->size();

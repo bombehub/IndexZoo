@@ -26,12 +26,19 @@ enum ComputeType {
   RegressionType,
 };
 
+enum QueryType {
+  PointQueryType = 0,
+  RangeQueryType,
+};
+
 struct Config {
   AccessType access_type_ = PrimaryIndexAccess;
   IndexPointerType index_pointer_type_ = LogicalPointerType;
   BenchmarkType benchmark_type_ = MicroBenchmarkType;
+  QueryType query_type_ = PointQueryType;
   size_t tuple_count_ = 100000;
   size_t query_count_ = 100000;
+  float selectivity_ = 0.1;
   
   size_t fanout_ = 4;
   size_t error_bound_ = 1;

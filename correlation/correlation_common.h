@@ -21,6 +21,13 @@ enum BenchmarkType {
   FlightBenchmarkType,
 };
 
+enum DistributionType {
+  LinearType = 0,
+  LogNormalType,
+  LogNormalCDFType,
+  SigmoidType,
+};
+
 enum ComputeType {
   InterpolationType = 0,
   RegressionType,
@@ -44,6 +51,7 @@ struct Config {
   AccessType access_type_ = PrimaryIndexAccess;
   IndexPointerType index_pointer_type_ = LogicalPointerType;
   BenchmarkType benchmark_type_ = MicroBenchmarkType;
+  DistributionType distribution_type_ = LinearType;
   QueryType query_type_ = PointQueryType;
   size_t tuple_count_ = 100000;
   size_t query_count_ = 100000;

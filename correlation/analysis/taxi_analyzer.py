@@ -17,15 +17,15 @@ if __name__ == "__main__":
         distances.append(float(row[4]))
         fares.append(float(row[10])) 
         totals.append(float(row[16]))
-      if count > 10:
+      if count > 1000:
         break
       count += 1
 
-  print(distances)
-  print(fares)
-  print(totals)
+  # print(distances)
+  # print(fares)
+  # print(totals)
 
-  # plt.plot(distances, fares, 'ro')
-  # plt.plot(distances, totals, 'bo')
-  # plt.show()
+  plt.plot(distances, fares, 'ro')
+  plt.plot(distances, totals, 'bo')
+  plt.show()
   

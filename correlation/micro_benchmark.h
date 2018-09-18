@@ -47,18 +47,29 @@ private:
     for (size_t tuple_id = 0; tuple_id < config_.tuple_count_; ++tuple_id) {
       
       uint64_t attr0 = rand_gen.next<uint64_t>(); // primary key
-      // uint64_t attr1 = 0;
-      // if (tuple_id < config_.tuple_count_ * 2 * 1.0 / 3) {
-      //   attr1 = tuple_id * 2;
-      // } else {
-      //   attr1 = tuple_id * 5;
-      // }
 
-      double x = tuple_id * 1.0 / config_.tuple_count_ * 12 - 6;
-      uint64_t attr1 = uint64_t(1.0 / (1 + exp(-x)) * 10000000);
+      uint64_t attr2 = rand_gen.next<uint64_t>() % config_.tuple_count_;
 
-      // uint64_t attr1 = tuple_id;
-      uint64_t attr2 = tuple_id;
+      uint64_t attr1 = 0;
+
+      if (config_.distribution_type_ == LinearType) {
+
+        attr1 = attr2;
+
+      }  else if (config_.distribution_type_ == LogNormalType) {
+
+
+      } else if (config_.distribution_type_ == LogNormalCDFType) {
+
+
+      } else {
+        assert(config_.distribution_type_ == SigmoidType);
+
+        double x = attr2 * 1.0 / config_.tuple_count_ * 12 - 6;
+        attr1 = uint64_t(1.0 / (1 + exp(-x)) * 10000000);
+      }
+
+      
       uint64_t attr3 = rand_gen.next<uint64_t>() % 100;
 
       outfile << attr1 << "," << attr2 << std::endl;

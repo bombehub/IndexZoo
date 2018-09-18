@@ -32,6 +32,6 @@ if __name__ == "__main__":
         intercept = float(row[8])
         print('{},{},{},{},{}'.format(range_lhs, range_rhs, epsilon, slope, intercept))
         graph("x*slope+intercept", range(range_lhs, range_rhs), 'b')
-        graph("x*slope+intercept-100000", range(range_lhs, range_rhs), 'y')
-        graph("x*slope+intercept+100000", range(range_lhs, range_rhs), 'g')
+        graph("x*slope+intercept-epsilon", range(range_lhs, range_rhs), 'y')
+        graph("x*slope+intercept+epsilon", range(range_lhs, range_rhs), 'g')
   plt.show()

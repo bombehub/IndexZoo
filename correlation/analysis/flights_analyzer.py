@@ -13,8 +13,8 @@ if __name__ == "__main__":
 
     count = 0
     for row in rows:
-      print(row)
-      print(len(row))
+      # print(row)
+      # print(len(row))
       if count > 0:
         if row[15] != '' and row[16] != '' and row[17] != '':
           elapsed_times.append(float(row[15]))
@@ -24,8 +24,8 @@ if __name__ == "__main__":
         break
       count += 1
 
-  print(air_times)
-  print(distances)
+  # print(air_times)
+  # print(distances)
 
   plt.plot(distances, air_times, 'ro')
   plt.plot(distances, elapsed_times, 'bo')

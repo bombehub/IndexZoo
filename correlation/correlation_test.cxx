@@ -40,13 +40,17 @@ void usage(FILE *out) {
           "                              -- (1) taxi benchmark \n"
           "                              -- (2) flight benchmark \n"
           "                              -- (3) TBD \n"
-          "  -c --compute             : compute type \n"
-          "                              -- (0) interpolation (default) \n"
-          "                              -- (1) regression \n"
+          "  -d --distribution        : distribution type \n"
+          "                              -- (0) linear (default) \n"
+          "                              -- (1) log-normal \n"
+          "                              -- (2) log-normal CDF \n"
           "  -u --query               : query type \n"
           "                              -- (0) point (default) \n"
           "                              -- (1) range \n"
           "  -s --selectivity         : selectivity for range query \n"
+          "  -c --compute             : compute type \n"
+          "                              -- (0) interpolation (default) \n"
+          "                              -- (1) regression \n"
           "  -t --tuple_count         : tuple count \n"
           "  -q --query_count         : query count \n"
           "  -f --fanout              : fanout \n"
@@ -62,16 +66,19 @@ static struct option opts[] = {
     { "access",              optional_argument, NULL, 'a' },
     { "index_pointer",       optional_argument, NULL, 'i' },
     { "benchmark",           optional_argument, NULL, 'b' },
-    { "compute",             optional_argument, NULL, 'c' },
+    { "distribution",        optional_argument, NULL, 'd' },
     { "query",               optional_argument, NULL, 'u' },
     { "selectivity",         optional_argument, NULL, 's' },
     { "tuple_count",         optional_argument, NULL, 't' },
     { "query_count",         optional_argument, NULL, 'q' },
+    /////////////////////////
+    { "compute",             optional_argument, NULL, 'c' },
     { "fanout",              optional_argument, NULL, 'f' },
     { "error_bound",         optional_argument, NULL, 'e' },
     { "outlier_threshold",   optional_argument, NULL, 'o' },
     { "min_node_size",       optional_argument, NULL, 'n' },
     { "max_height",          optional_argument, NULL, 'm' },
+    /////////////////////////
     { "verbose",             optional_argument, NULL, 'v' },
     { NULL, 0, NULL, 0 }
 };
@@ -80,7 +87,7 @@ void parse_args(int argc, char* argv[], Config &config) {
   
   while (1) {
     int idx = 0;
-    int c = getopt_long(argc, argv, "hva:i:b:c:t:q:s:f:e:o:n:m:u:", opts, &idx);
+    int c = getopt_long(argc, argv, "hva:i:b:d:c:t:q:s:f:e:o:n:m:u:", opts, &idx);
 
     if (c == -1) break;
 

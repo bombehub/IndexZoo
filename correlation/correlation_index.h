@@ -194,13 +194,13 @@ class CorrelationIndex {
 
         uint64_t estimate_host = estimate(guest);
 
-        uint64_t estimate_lhs_host, estimate_rhs_host;
+        uint64_t estimate_host_lhs, estimate_host_rhs;
 
-        get_bound(estimate_host, estimate_lhs_host, estimate_rhs_host);
+        get_bound(estimate_host, estimate_host_lhs, estimate_host_rhs);
 
-        if (estimate_lhs_host > host || estimate_rhs_host < host) {
+        if (estimate_host_lhs > host || estimate_host_rhs < host) {
           // if not in the range
-          // std::cout << estimate_lhs_host << " " << host << " " << estimate_rhs_host << std::endl;
+          // std::cout << estimate_host_lhs << " " << host << " " << estimate_host_rhs << std::endl;
           outlier_buffer_.insert( {guest, host} );
         }
       }
@@ -220,21 +220,24 @@ class CorrelationIndex {
     }
 
     // return true means have range
-    bool lookup(const uint64_t guest_key, uint64_t &ret_lhs_host, uint64_t &ret_rhs_host, std::vector<uint64_t> &outliers) const {
+    bool lookup(const uint64_t ip_guest, uint64_t &ret_host_lhs, uint64_t &ret_host_rhs, std::vector<uint64_t> &outliers) const {
+      
+      if (ip_guest > guest_begin_ || ip_guest < guest_end_) { return false; }
+      
       if (children_count_ == 0) {
         // this is leaf node. search here.
 
         // first check outlier_buffer
-        auto ret = outlier_buffer_.equal_range(guest_key);
+        auto ret = outlier_buffer_.equal_range(ip_guest);
         for (auto it = ret.first; it != ret.second; ++it) {
           outliers.push_back(it->second);
         }
 
         if (compute_enabled_ == true) {
           // estimate the host key via function computation
-          uint64_t host_key = estimate(guest_key);
+          uint64_t estimate_host = estimate(ip_guest);
           // get min and max bound based on estimated value
-          get_bound(host_key, ret_lhs_host, ret_rhs_host);
+          get_bound(estimate_host, ret_host_lhs, ret_host_rhs);
 
           return true;
 
@@ -248,40 +251,40 @@ class CorrelationIndex {
         // TODO: accelerate using SIMD
         for (size_t i = 0; i < children_count_ - 1; ++i) {
           
-          if (guest_key < children_index_[i]) {
+          if (ip_guest < children_index_[i]) {
 
-            return children_[i]->lookup(guest_key, ret_lhs_host, ret_rhs_host, outliers);
+            return children_[i]->lookup(ip_guest, ret_host_lhs, ret_host_rhs, outliers);
           }
         }
 
-        return children_[children_count_ - 1]->lookup(guest_key, ret_lhs_host, ret_rhs_host, outliers);
+        return children_[children_count_ - 1]->lookup(ip_guest, ret_host_lhs, ret_host_rhs, outliers);
       }
     }
 
-    void range_lookup(const uint64_t guest_lhs_key, const uint64_t guest_rhs_key, std::vector<std::pair<uint64_t, uint64_t>> &ret_host_ranges, std::vector<uint64_t> &outliers) const {
+    void range_lookup(const uint64_t ip_guest_lhs, const uint64_t ip_guest_rhs, std::vector<std::pair<uint64_t, uint64_t>> &ret_host_ranges, std::vector<uint64_t> &outliers) const {
       if (children_count_ == 0) {
         // this is leaf node. search here.
 
         // first check outlier_buffer
-        auto ret_lhs = outlier_buffer_.lower_bound(guest_lhs_key);
-        auto ret_rhs = outlier_buffer_.upper_bound(guest_rhs_key);
-        for (auto it = ret_lhs; it != ret_rhs; ++it) {
+        auto begin_iter = outlier_buffer_.lower_bound(ip_guest_lhs);
+        auto end_iter = outlier_buffer_.upper_bound(ip_guest_rhs);
+        for (auto it = begin_iter; it != end_iter; ++it) {
           outliers.push_back(it->second);
         }
 
         if (compute_enabled_ == true) {
 
-          uint64_t guest_lhs = (guest_begin_ < guest_lhs_key) ? guest_begin_ : guest_lhs_key;
+          uint64_t guest_lhs = (guest_begin_ < ip_guest_lhs) ? guest_begin_ : ip_guest_lhs;
 
-          uint64_t guest_rhs = (guest_end_ > guest_rhs_key) ? guest_end_ : guest_rhs_key;
+          uint64_t guest_rhs = (guest_end_ > ip_guest_rhs) ? guest_end_ : ip_guest_rhs;
 
           // estimate the host key via function computation
-          uint64_t host_lhs_key = estimate(guest_lhs);
-          uint64_t host_rhs_key = estimate(guest_rhs);
+          uint64_t estimate_host_lhs = estimate(guest_lhs);
+          uint64_t estimate_host_rhs = estimate(guest_rhs);
           // get min and max bound based on estimated value
           // TODO: fix here!!!
  
-          // get_bound(host_key, ret_lhs_host, ret_rhs_host);
+          // get_bound(host_key, ret_host_lhs, ret_host_rhs);
 
           return;
 
@@ -296,13 +299,13 @@ class CorrelationIndex {
       //   // TODO: accelerate using SIMD
       //   for (size_t i = 0; i < children_count_ - 1; ++i) {
           
-      //     if (guest_key < children_index_[i]) {
+      //     if (ip_guest < children_index_[i]) {
 
-      //       return children_[i]->lookup(guest_key, ret_lhs_host, ret_rhs_host, outliers);
+      //       return children_[i]->lookup(ip_guest, ret_host_lhs, ret_host_rhs, outliers);
       //     }
       //   }
 
-      //   return children_[children_count_ - 1]->lookup(guest_key, ret_lhs_host, ret_rhs_host, outliers);
+      //   return children_[children_count_ - 1]->lookup(ip_guest, ret_host_lhs, ret_host_rhs, outliers);
       // }
     }
 
@@ -405,18 +408,18 @@ public:
 
   }
 
-  bool lookup(const uint64_t guest_key, uint64_t &ret_lhs_host, uint64_t &ret_rhs_host, std::vector<uint64_t> &outliers) const {
+  bool lookup(const uint64_t ip_guest, uint64_t &ret_host_lhs, uint64_t &ret_host_rhs, std::vector<uint64_t> &outliers) const {
 
     ASSERT(root_node_ != nullptr, "root note cannot be nullptr");
 
-    return root_node_->lookup(guest_key, ret_lhs_host, ret_rhs_host, outliers);
+    return root_node_->lookup(ip_guest, ret_host_lhs, ret_host_rhs, outliers);
   }
 
-  void range_lookup(const uint64_t guest_lhs_key, const uint64_t guest_rhs_key, std::vector<std::pair<uint64_t, uint64_t>> &ret_host_ranges, std::vector<uint64_t> &outliers) const {
+  void range_lookup(const uint64_t ip_guest_lhs, const uint64_t ip_guest_rhs, std::vector<std::pair<uint64_t, uint64_t>> &ret_host_ranges, std::vector<uint64_t> &outliers) const {
 
     ASSERT(root_node_ != nullptr, "root note cannot be nullptr");
 
-    root_node_->range_lookup(guest_lhs_key, guest_rhs_key, ret_host_ranges, outliers);
+    root_node_->range_lookup(ip_guest_lhs, ip_guest_rhs, ret_host_ranges, outliers);
   }
 
   void construct(const GenericDataTable *data_table, const TupleSchema &tuple_schema, const size_t guest_column_id, const size_t host_column_id) {

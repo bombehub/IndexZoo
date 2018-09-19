@@ -259,30 +259,40 @@ class CorrelationIndex {
     }
 
     void range_lookup(const uint64_t guest_lhs_key, const uint64_t guest_rhs_key, std::vector<std::pair<uint64_t, uint64_t>> &ret_host_ranges, std::vector<uint64_t> &outliers) const {
-      // if (children_count_ == 0) {
-      //   // this is leaf node. search here.
+      if (children_count_ == 0) {
+        // this is leaf node. search here.
 
-      //   // first check outlier_buffer
-      //   auto ret = outlier_buffer_.equal_range(guest_key);
-      //   for (auto it = ret.first; it != ret.second; ++it) {
-      //     outliers.push_back(it->second);
-      //   }
+        // first check outlier_buffer
+        auto ret_lhs = outlier_buffer_.lower_bound(guest_lhs_key);
+        auto ret_rhs = outlier_buffer_.upper_bound(guest_rhs_key);
+        for (auto it = ret_lhs; it != ret_rhs; ++it) {
+          outliers.push_back(it->second);
+        }
 
-      //   if (compute_enabled_ == true) {
-      //     // estimate the host key via function computation
-      //     uint64_t host_key = estimate(guest_key);
-      //     // get min and max bound based on estimated value
-      //     get_bound(host_key, ret_lhs_host, ret_rhs_host);
+        if (compute_enabled_ == true) {
 
-      //     return true;
+          uint64_t guest_lhs = (guest_begin_ < guest_lhs_key) ? guest_begin_ : guest_lhs_key;
 
-      //   } else {
+          uint64_t guest_rhs = (guest_end_ > guest_rhs_key) ? guest_end_ : guest_rhs_key;
 
-      //     return false;
+          // estimate the host key via function computation
+          uint64_t host_lhs_key = estimate(guest_lhs);
+          uint64_t host_rhs_key = estimate(guest_rhs);
+          // get min and max bound based on estimated value
+          // TODO: fix here!!!
+ 
+          // get_bound(host_key, ret_lhs_host, ret_rhs_host);
 
-      //   }
+          return;
 
-      // } else {
+        } else {
+
+          return;
+
+        }
+
+      } 
+        // else {
       //   // TODO: accelerate using SIMD
       //   for (size_t i = 0; i < children_count_ - 1; ++i) {
           

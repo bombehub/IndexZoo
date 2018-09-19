@@ -42,12 +42,12 @@ void usage(FILE *out) {
           "                              -- (3) TBD \n"
           "  -d --distribution        : distribution type \n"
           "                              -- (0) linear (default) \n"
-          "                              -- (1) log-normal \n"
-          "                              -- (2) log-normal CDF \n"
+          "                              -- (1) sigmoid \n"
           "  -u --query               : query type \n"
           "                              -- (0) point (default) \n"
           "                              -- (1) range \n"
           "  -s --selectivity         : selectivity for range query \n"
+          "  -r --outlier_ratio       : outlier ratio \n"
           "  -c --compute             : compute type \n"
           "                              -- (0) interpolation (default) \n"
           "                              -- (1) regression \n"
@@ -69,6 +69,7 @@ static struct option opts[] = {
     { "distribution",        optional_argument, NULL, 'd' },
     { "query",               optional_argument, NULL, 'u' },
     { "selectivity",         optional_argument, NULL, 's' },
+    { "outlier_ratio",       optional_argument, NULL, 'r' },
     { "tuple_count",         optional_argument, NULL, 't' },
     { "query_count",         optional_argument, NULL, 'q' },
     /////////////////////////
@@ -87,7 +88,7 @@ void parse_args(int argc, char* argv[], Config &config) {
   
   while (1) {
     int idx = 0;
-    int c = getopt_long(argc, argv, "hva:i:b:d:c:t:q:s:f:e:o:n:m:u:", opts, &idx);
+    int c = getopt_long(argc, argv, "hva:i:b:d:c:t:q:s:r:f:e:o:n:m:u:", opts, &idx);
 
     if (c == -1) break;
 
@@ -104,6 +105,10 @@ void parse_args(int argc, char* argv[], Config &config) {
         config.benchmark_type_ = (BenchmarkType)atoi(optarg);
         break;
       }
+      case 'd': {
+        config.distribution_type_ = (DistributionType)atoi(optarg);
+        break;
+      }
       case 'c': {
         config.correlation_index_params_.compute_type_ = (ComputeType)atoi(optarg);
         break;
@@ -114,6 +119,10 @@ void parse_args(int argc, char* argv[], Config &config) {
       }
       case 's': {
         config.selectivity_ = atof(optarg);
+        break;
+      }
+      case 'r': {
+        config.outlier_ratio_ = atof(optarg);
         break;
       }
       case 't': {

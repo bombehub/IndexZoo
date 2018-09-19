@@ -23,8 +23,6 @@ enum BenchmarkType {
 
 enum DistributionType {
   LinearType = 0,
-  LogNormalType,
-  LogNormalCDFType,
   SigmoidType,
 };
 
@@ -56,6 +54,7 @@ struct Config {
   size_t tuple_count_ = 100000;
   size_t query_count_ = 100000;
   float selectivity_ = 0.1;
+  float outlier_ratio_ = 0.01;
   bool verbose_ = false;
   
   CorrelationIndexParams correlation_index_params_;

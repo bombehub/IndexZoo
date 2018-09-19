@@ -547,11 +547,7 @@ protected:
   size_t secondary_column_id_;
   size_t correlation_column_id_;
   size_t read_column_id_;
-
-  uint64_t correlation_max_ = 0;
-  uint64_t correlation_min_ = std::numeric_limits<uint64_t>::max();
-
-
+  
   size_t key_size_;
   size_t value_size_;
 

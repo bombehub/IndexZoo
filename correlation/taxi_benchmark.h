@@ -83,14 +83,6 @@ private:
         secondary_index_->insert(attr1, offset.raw_data());
       }
 
-      if (attr2 > correlation_max_) {
-        correlation_max_ = attr2;
-      }
-      if (attr2 < correlation_min_) {
-        correlation_min_ = attr2;
-      }
-
-
       ++tuple_id;
 
       if (tuple_id == config_.tuple_count_) { break; }

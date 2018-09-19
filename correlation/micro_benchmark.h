@@ -1,6 +1,7 @@
 #pragma once
-  
+
 #include <cmath>
+#include <random>
 #include "base_benchmark.h"
 
 class MicroBenchmark : public BaseBenchmark {
@@ -28,11 +29,6 @@ private:
 
   }
 
-
-  double sigmoid(const double x) {
-    return 1.0 / (1 + exp(-x));
-  }
-
   virtual void build_table() final {
 
     FastRandom rand_gen;
@@ -44,39 +40,55 @@ private:
 
     if (outfile.is_open() == false) { assert(false); }
 
+    if (config_.distribution_type_ == LinearType) {
+      // linear distribution
+      for (size_t tuple_id = 0; tuple_id < config_.tuple_count_; ++tuple_id) {
+
+        uint64_t attr2 = rand_gen.next<uint64_t>() % config_.tuple_count_;
+        uint64_t attr1 = attr2;
+
+        if (rand_gen.next_uniform() < config_.outlier_ratio_) {
+          attr1 *= 2;
+        }
+
+        secondary_keys_.push_back(attr1);
+        correlation_keys_.push_back(attr2);
+      }
+    } else {
+      // sigmoid
+      assert(config_.distribution_type_ == SigmoidType);
+
+      for (size_t tuple_id = 0; tuple_id < config_.tuple_count_; ++tuple_id) {
+
+        uint64_t attr2 = rand_gen.next<uint64_t>() % config_.tuple_count_;
+
+        double x = attr2 * 1.0 / config_.tuple_count_ * 12 - 6;
+        uint64_t attr1 = uint64_t(1.0 / (1 + exp(-x)) * 10000000);
+        
+        if (rand_gen.next_uniform() < config_.outlier_ratio_) {
+          attr1 *= 2;
+        }
+
+        secondary_keys_.push_back(attr1);
+        correlation_keys_.push_back(attr2);
+      }
+
+    }
+
+
     for (size_t tuple_id = 0; tuple_id < config_.tuple_count_; ++tuple_id) {
       
       uint64_t attr0 = rand_gen.next<uint64_t>(); // primary key
 
-      uint64_t attr2 = rand_gen.next<uint64_t>() % config_.tuple_count_;
+      uint64_t attr1 = secondary_keys_.at(tuple_id);
 
-      uint64_t attr1 = 0;
+      uint64_t attr2 = correlation_keys_.at(tuple_id);
 
-      if (config_.distribution_type_ == LinearType) {
-
-        attr1 = attr2;
-
-      }  else if (config_.distribution_type_ == LogNormalType) {
-
-
-      } else if (config_.distribution_type_ == LogNormalCDFType) {
-
-
-      } else {
-        assert(config_.distribution_type_ == SigmoidType);
-
-        double x = attr2 * 1.0 / config_.tuple_count_ * 12 - 6;
-        attr1 = uint64_t(1.0 / (1 + exp(-x)) * 10000000);
-      }
-
-      
       uint64_t attr3 = rand_gen.next<uint64_t>() % 100;
 
       outfile << attr1 << "," << attr2 << std::endl;
 
       primary_keys_.push_back(attr0);
-      secondary_keys_.push_back(attr1);
-      correlation_keys_.push_back(attr2);
 
       memcpy(tuple_key.raw(), (char*)(&attr0), sizeof(uint64_t));
 
@@ -95,13 +107,6 @@ private:
         secondary_index_->insert(attr1, attr0);
       } else {
         secondary_index_->insert(attr1, offset.raw_data());
-      }
-
-      if (attr2 > correlation_max_) {
-        correlation_max_ = attr2;
-      }
-      if (attr2 < correlation_min_) {
-        correlation_min_ = attr2;
       }
 
     }

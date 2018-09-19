@@ -222,7 +222,7 @@ class CorrelationIndex {
     // return true means have range
     bool lookup(const uint64_t ip_guest, uint64_t &ret_host_lhs, uint64_t &ret_host_rhs, std::vector<uint64_t> &outliers) const {
       
-      if (ip_guest > guest_begin_ || ip_guest < guest_end_) { return false; }
+      if (ip_guest < guest_begin_ || ip_guest > guest_end_) { return false; }
       
       if (children_count_ == 0) {
         // this is leaf node. search here.
@@ -262,6 +262,14 @@ class CorrelationIndex {
     }
 
     void range_lookup(const uint64_t ip_guest_lhs, const uint64_t ip_guest_rhs, std::vector<std::pair<uint64_t, uint64_t>> &ret_host_ranges, std::vector<uint64_t> &outliers) const {
+
+      assert(ip_guest_lhs < ip_guest_rhs);
+
+      if (ip_guest_rhs < guest_begin_ || ip_guest_lhs > guest_end_) { return; }
+
+      uint64_t real_guest_lhs = (ip_guest_lhs > guest_begin_) ? ip_guest_lhs : guest_begin_;
+      uint64_t real_guest_rhs = (ip_guest_rhs < guest_end_) ? ip_guest_rhs : guest_end_;
+
       if (children_count_ == 0) {
         // this is leaf node. search here.
 

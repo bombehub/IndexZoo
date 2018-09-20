@@ -378,7 +378,7 @@ private:
         std::vector<uint64_t> pkeys;
         
         index->range_lookup(lhs_key, rhs_key, pkeys);
-        
+
         std::vector<uint64_t> offsets;
 
         primary_index_->lookup(pkeys, offsets);
@@ -387,7 +387,6 @@ private:
           char *value = data_table_->get_tuple(offset);
           size_t read_column_offset = tuple_schema_.get_attr_offset(read_column_id_);
           uint64_t read_column_ret = *(uint64_t*)(value + read_column_offset);
-
           sum += read_column_ret;
         }
       }
@@ -547,7 +546,7 @@ protected:
   size_t secondary_column_id_;
   size_t correlation_column_id_;
   size_t read_column_id_;
-  
+
   size_t key_size_;
   size_t value_size_;
 

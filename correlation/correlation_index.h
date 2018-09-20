@@ -172,13 +172,34 @@ class CorrelationIndex {
       return slope_ * key * 1.0 + intercept_;
     }
 
-    inline void get_bound(const uint64_t key, uint64_t &lhs_key, uint64_t &rhs_key) const {
+    inline void get_bound(const uint64_t key, uint64_t &ret_key_lhs, uint64_t &ret_key_rhs) const {
       if (key < epsilon_) {
-        lhs_key = 0;
+        ret_key_lhs = 0;
       } else {
-        lhs_key = key - epsilon_;
+        ret_key_lhs = key - epsilon_;
       }
-      rhs_key = key + epsilon_;
+      ret_key_rhs = key + epsilon_;
+    }
+
+    inline void get_bound(const uint64_t key0, const uint64_t key1, uint64_t &ret_key_lhs, uint64_t &ret_key_rhs) const {
+      
+      uint64_t small_key, large_key;
+      if (key0 < key1) {
+        small_key = key0;
+        large_key = key1;
+      } else {
+        small_key = key1;
+        large_key = key0;
+      }
+
+      if (small_key < epsilon_) {
+        ret_key_lhs = 0;
+      } else {
+        ret_key_lhs = small_key - epsilon_;
+      }
+      ret_key_rhs = large_key + epsilon_;
+
+      return;
     }
 
     // if true, then pass validation. there's no need to further split this node.
@@ -274,25 +295,23 @@ class CorrelationIndex {
         // this is leaf node. search here.
 
         // first check outlier_buffer
-        auto begin_iter = outlier_buffer_.lower_bound(ip_guest_lhs);
-        auto end_iter = outlier_buffer_.upper_bound(ip_guest_rhs);
+        auto begin_iter = outlier_buffer_.lower_bound(real_guest_lhs);
+        auto end_iter = outlier_buffer_.upper_bound(real_guest_rhs);
         for (auto it = begin_iter; it != end_iter; ++it) {
           outliers.push_back(it->second);
         }
 
         if (compute_enabled_ == true) {
 
-          uint64_t guest_lhs = (guest_begin_ < ip_guest_lhs) ? guest_begin_ : ip_guest_lhs;
-
-          uint64_t guest_rhs = (guest_end_ > ip_guest_rhs) ? guest_end_ : ip_guest_rhs;
-
           // estimate the host key via function computation
-          uint64_t estimate_host_lhs = estimate(guest_lhs);
-          uint64_t estimate_host_rhs = estimate(guest_rhs);
+          uint64_t estimate_host_lhs = estimate(real_guest_lhs);
+          uint64_t estimate_host_rhs = estimate(real_guest_rhs);
+
+          uint64_t ret_host_lhs, ret_host_rhs;
           // get min and max bound based on estimated value
-          // TODO: fix here!!!
- 
-          // get_bound(host_key, ret_host_lhs, ret_host_rhs);
+          get_bound(estimate_host_lhs, estimate_host_rhs, ret_host_lhs, ret_host_rhs);
+
+          ret_host_ranges.push_back( { ret_host_lhs, ret_host_rhs } );
 
           return;
 
@@ -302,19 +321,27 @@ class CorrelationIndex {
 
         }
 
-      } 
-        // else {
-      //   // TODO: accelerate using SIMD
-      //   for (size_t i = 0; i < children_count_ - 1; ++i) {
+      } else {
+        // TODO: accelerate using SIMD
+        for (size_t i = 0; i < children_count_ - 1; ++i) {
           
-      //     if (ip_guest < children_index_[i]) {
+          if (real_guest_lhs < children_index_[i]) {
 
-      //       return children_[i]->lookup(ip_guest, ret_host_lhs, ret_host_rhs, outliers);
-      //     }
-      //   }
+            children_[i]->range_lookup(real_guest_lhs, real_guest_rhs, ret_host_ranges, outliers);
+          }
 
-      //   return children_[children_count_ - 1]->lookup(ip_guest, ret_host_lhs, ret_host_rhs, outliers);
-      // }
+          if (real_guest_rhs < children_index_[i]) {
+
+            return;
+
+          }
+        }
+
+        children_[children_count_ - 1]->range_lookup(real_guest_lhs, real_guest_rhs, ret_host_ranges, outliers);
+
+        return;
+
+      }
     }
 
     inline bool has_children() const {

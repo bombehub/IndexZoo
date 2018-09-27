@@ -16,11 +16,12 @@ const double INVALID_DOUBLE = std::numeric_limits<double>::max();
 class CorrelationIndex {
 
   struct AttributePair {
-    AttributePair() : guest_(0), host_(0) {}
-    AttributePair(const uint64_t target, const uint64_t host) : guest_(target), host_(host) {}
+    AttributePair() : guest_(0), host_(0), tuple_id_(0) {}
+    AttributePair(const uint64_t target, const uint64_t host, const uint64_t tuple_id) : guest_(target), host_(host), tuple_id_(tuple_id) {}
 
     uint64_t guest_;
     uint64_t host_;
+    uint64_t tuple_id_;
   };
 
   static bool compare_func(AttributePair &lhs, AttributePair &rhs) {
@@ -44,6 +45,7 @@ class CorrelationIndex {
       guest_begin_ = container_ptr[offset_begin_].guest_;
       guest_end_ = container_ptr[offset_end_].guest_;
 
+      // these are useful only when calculating slope using interpolation
       host_begin_ = container_ptr[offset_begin_].host_;
       host_end_ = container_ptr[offset_end_].host_;
       
@@ -54,10 +56,8 @@ class CorrelationIndex {
       intercept_ = INVALID_DOUBLE;
 
       // double density = std::abs(offset_span_ * 1.0 / (host_end_ - host_begin_));
-
       // epsilon_ = std::ceil(index_->error_bound_ * 1.0 / density / 2);
 
-      // epsilon_ = index_->error_bound_;
 
       epsilon_ = (host_end_ - host_begin_) * index_->params_.error_bound_;
 
@@ -203,6 +203,7 @@ class CorrelationIndex {
     }
 
     // if true, then pass validation. there's no need to further split this node.
+    // this function will detect outliers.
     bool validate() {
       
       assert(outlier_buffer_.size() == 0);
@@ -222,7 +223,8 @@ class CorrelationIndex {
         if (estimate_host_lhs > host || estimate_host_rhs < host) {
           // if not in the range
           // std::cout << estimate_host_lhs << " " << host << " " << estimate_host_rhs << std::endl;
-          outlier_buffer_.insert( {guest, host} );
+          uint64_t tuple_id = container_ptr[i].tuple_id_;
+          outlier_buffer_.insert( {guest, tuple_id} );
         }
       }
       
@@ -457,7 +459,7 @@ public:
     root_node_->range_lookup(ip_guest_lhs, ip_guest_rhs, ret_host_ranges, outliers);
   }
 
-  void construct(const GenericDataTable *data_table, const TupleSchema &tuple_schema, const size_t guest_column_id, const size_t host_column_id) {
+  void construct(const GenericDataTable *data_table, const TupleSchema &tuple_schema, const size_t guest_column_id, const size_t host_column_id, const IndexPointerType index_pointer_type) {
 
     size_ = data_table->size();
 
@@ -465,21 +467,49 @@ public:
 
     GenericDataTableIterator iterator(data_table);
     size_t i = 0;
-    while (iterator.has_next()) {
-      auto entry = iterator.next();
+
+    if (index_pointer_type == LogicalPointerType) {
       
-      char *tuple_ptr = entry.key_;
+      while (iterator.has_next()) {
+        auto entry = iterator.next();
+        
+        char *tuple_ptr = entry.key_;
 
-      size_t guest_attr_offset = tuple_schema.get_attr_offset(guest_column_id);
-      uint64_t guest_attr_ret = *(uint64_t*)(tuple_ptr + guest_attr_offset);
+        uint64_t pkey = *(uint64_t*)tuple_ptr;
 
-      size_t host_attr_offset = tuple_schema.get_attr_offset(host_column_id);
-      uint64_t host_attr_ret = *(uint64_t*)(tuple_ptr + host_attr_offset);
+        size_t guest_attr_offset = tuple_schema.get_attr_offset(guest_column_id);
+        uint64_t guest_attr_ret = *(uint64_t*)(tuple_ptr + guest_attr_offset);
 
+        size_t host_attr_offset = tuple_schema.get_attr_offset(host_column_id);
+        uint64_t host_attr_ret = *(uint64_t*)(tuple_ptr + host_attr_offset);
 
-      container_[i].guest_ = guest_attr_ret;
-      container_[i].host_ = host_attr_ret;
-      i++;
+        container_[i].guest_ = guest_attr_ret;
+        container_[i].host_ = host_attr_ret;
+        container_[i].tuple_id_ = pkey;
+        i++;
+      }
+
+    } else {
+
+      while (iterator.has_next()) {
+        auto entry = iterator.next();
+        
+        char *tuple_ptr = entry.key_;
+
+        uint64_t offset = entry.offset_;
+
+        size_t guest_attr_offset = tuple_schema.get_attr_offset(guest_column_id);
+        uint64_t guest_attr_ret = *(uint64_t*)(tuple_ptr + guest_attr_offset);
+
+        size_t host_attr_offset = tuple_schema.get_attr_offset(host_column_id);
+        uint64_t host_attr_ret = *(uint64_t*)(tuple_ptr + host_attr_offset);
+
+        container_[i].guest_ = guest_attr_ret;
+        container_[i].host_ = host_attr_ret;
+        container_[i].tuple_id_ = offset;
+        i++;
+      }
+
     }
 
     ASSERT(i == size_, "incorrect loading");

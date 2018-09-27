@@ -77,7 +77,7 @@ private:
     if (config_.access_type_ == BaselineIndexAccess) {
       baseline_index_->construct(data_table_.get(), tuple_schema_, correlation_column_id_, config_.index_pointer_type_);
     } else if (config_.access_type_ == CorrelationIndexAccess) {
-      correlation_index_->construct(data_table_.get(), tuple_schema_, correlation_column_id_, secondary_column_id_);
+      correlation_index_->construct(data_table_.get(), tuple_schema_, correlation_column_id_, secondary_column_id_, config_.index_pointer_type_);
       correlation_index_->print(config_.verbose_);
     }
 
@@ -253,11 +253,10 @@ private:
         if (ret == true) {
           secondary_index_->range_lookup(lhs_host_key, rhs_host_key, pkeys); 
         }
-        if (outliers.size() != 0) {
-          secondary_index_->lookup(outliers, pkeys);
-        }
-
-        // std::cout << "pkeys size = " << pkeys.size() << std::endl;
+        // if (outliers.size() != 0) {
+        //   secondary_index_->lookup(outliers, pkeys);
+        // }
+        // pkeys.insert(pkeys.end(), outliers.begin(), outliers.end());
 
         std::vector<uint64_t> offsets;
 
@@ -270,6 +269,22 @@ private:
           uint64_t correlation_column_ret = *(uint64_t*)(value + correlation_column_offset);
 
           if (correlation_column_ret == key) {
+            size_t read_column_offset = tuple_schema_.get_attr_offset(read_column_id_);
+            uint64_t read_column_ret = *(uint64_t*)(value + read_column_offset);
+
+            sum += read_column_ret;
+          }
+        }
+
+        // outliers are primary keys
+        if (outliers.size() != 0) {
+          
+          offsets.clear();
+          
+          primary_index_->lookup(outliers, offsets);
+
+          for (auto offset : offsets) {
+            char *value = data_table_->get_tuple(offset);
             size_t read_column_offset = tuple_schema_.get_attr_offset(read_column_id_);
             uint64_t read_column_ret = *(uint64_t*)(value + read_column_offset);
 
@@ -297,9 +312,10 @@ private:
         if (ret == true) {
           secondary_index_->range_lookup(lhs_host_key, rhs_host_key, offsets);
         }
-        if (outliers.size() != 0) {
-          secondary_index_->lookup(outliers, offsets);
-        }
+        // if (outliers.size() != 0) {
+        //   secondary_index_->lookup(outliers, offsets);
+        // }
+        // offsets.insert(offsets.end(), outliers.begin(), outliers.end());
 
         for (auto offset : offsets) {
           char *value = data_table_->get_tuple(offset);
@@ -313,6 +329,15 @@ private:
 
             sum += read_column_ret;
           }
+        }
+
+        // outliers are offsets
+        for (auto offset : outliers) {
+          char *value = data_table_->get_tuple(offset);
+          size_t read_column_offset = tuple_schema_.get_attr_offset(read_column_id_);
+          uint64_t read_column_ret = *(uint64_t*)(value + read_column_offset);
+
+          sum += read_column_ret;
         }
 
       }
@@ -457,11 +482,10 @@ private:
         for (auto host_key_range : host_key_ranges) {
           secondary_index_->range_lookup(host_key_range.first, host_key_range.second, pkeys); 
         }
-        if (outliers.size() != 0) {
-          secondary_index_->lookup(outliers, pkeys);
-        }
-
-        // std::cout << "pkeys size = " << pkeys.size() << std::endl;
+        // if (outliers.size() != 0) {
+        //   secondary_index_->lookup(outliers, pkeys);
+        // }
+        // pkeys.insert(pkeys.end(), outliers.begin(), outliers.end());
 
         std::vector<uint64_t> offsets;
 
@@ -479,6 +503,23 @@ private:
 
             sum += read_column_ret;
           }
+        }
+
+        // outliers are primary keys
+        if (outliers.size() != 0) {
+
+          offsets.clear();
+
+          primary_index_->lookup(outliers, offsets);
+
+          for (auto offset : offsets) {
+            char *value = data_table_->get_tuple(offset);
+            size_t read_column_offset = tuple_schema_.get_attr_offset(read_column_id_);
+            uint64_t read_column_ret = *(uint64_t*)(value + read_column_offset);
+
+            sum += read_column_ret;
+          }
+
         }
 
       }
@@ -504,9 +545,9 @@ private:
         for (auto host_key_range : host_key_ranges) {
           secondary_index_->range_lookup(host_key_range.first, host_key_range.second, offsets);
         }
-        if (outliers.size() != 0) {
-          secondary_index_->lookup(outliers, offsets);
-        }
+        // if (outliers.size() != 0) {
+        //   secondary_index_->lookup(outliers, offsets);
+        // }
 
         for (auto offset : offsets) {
           char *value = data_table_->get_tuple(offset);
@@ -520,6 +561,15 @@ private:
 
             sum += read_column_ret;
           }
+        }
+
+        // outliers are offsets
+        for (auto offset : outliers) {
+          char *value = data_table_->get_tuple(offset);
+          size_t read_column_offset = tuple_schema_.get_attr_offset(read_column_id_);
+          uint64_t read_column_ret = *(uint64_t*)(value + read_column_offset);
+
+          sum += read_column_ret;
         }
 
       }

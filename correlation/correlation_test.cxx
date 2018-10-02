@@ -170,6 +170,8 @@ void parse_args(int argc, char* argv[], Config &config) {
       }
     }
   }
+
+  ASSERT(config.correlation_index_params_.outlier_threshold_ < 1, "outlier threshold must be less than 1");
 }
 
 

@@ -248,38 +248,37 @@ private:
         // find host key range
         bool ret = correlation_index_->lookup(key, lhs_host_key, rhs_host_key, outliers);
 
-        std::vector<uint64_t> pkeys;
-
         if (ret == true) {
+
+          std::vector<uint64_t> pkeys;
+
           secondary_index_->range_lookup(lhs_host_key, rhs_host_key, pkeys); 
-        }
-        // if (outliers.size() != 0) {
-        //   secondary_index_->lookup(outliers, pkeys);
-        // }
-        // pkeys.insert(pkeys.end(), outliers.begin(), outliers.end());
 
-        std::vector<uint64_t> offsets;
+          // std::cout << "pkeys size = " << pkeys.size() << " " << lhs_host_key << " " << rhs_host_key << std::endl;
 
-        primary_index_->lookup(pkeys, offsets);
+          std::vector<uint64_t> offsets;
 
-        for (auto offset : offsets) {
-          char *value = data_table_->get_tuple(offset);
-          
-          size_t correlation_column_offset = tuple_schema_.get_attr_offset(correlation_column_id_);
-          uint64_t correlation_column_ret = *(uint64_t*)(value + correlation_column_offset);
+          primary_index_->lookup(pkeys, offsets);
 
-          if (correlation_column_ret == key) {
-            size_t read_column_offset = tuple_schema_.get_attr_offset(read_column_id_);
-            uint64_t read_column_ret = *(uint64_t*)(value + read_column_offset);
+          for (auto offset : offsets) {
+            char *value = data_table_->get_tuple(offset);
+            
+            size_t correlation_column_offset = tuple_schema_.get_attr_offset(correlation_column_id_);
+            uint64_t correlation_column_ret = *(uint64_t*)(value + correlation_column_offset);
 
-            sum += read_column_ret;
+            if (correlation_column_ret == key) {
+              size_t read_column_offset = tuple_schema_.get_attr_offset(read_column_id_);
+              uint64_t read_column_ret = *(uint64_t*)(value + read_column_offset);
+
+              sum += read_column_ret;
+            }
           }
         }
 
         // outliers are primary keys
         if (outliers.size() != 0) {
           
-          offsets.clear();
+          std::vector<uint64_t> offsets;
           
           primary_index_->lookup(outliers, offsets);
 

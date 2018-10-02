@@ -55,11 +55,10 @@ class CorrelationIndex {
       slope_ = INVALID_DOUBLE;
       intercept_ = INVALID_DOUBLE;
 
-      // double density = std::abs(offset_span_ * 1.0 / (host_end_ - host_begin_));
-      // epsilon_ = std::ceil(index_->error_bound_ * 1.0 / density / 2);
+      double density = std::abs(offset_span_ * 1.0 / (host_end_ - host_begin_));
+      epsilon_ = std::ceil(index_->params_.error_bound_ * 1.0 / density / 2);
 
-
-      epsilon_ = (host_end_ - host_begin_) * index_->params_.error_bound_;
+      // epsilon_ = (host_end_ - host_begin_) * index_->params_.error_bound_;
 
       level_ = level;
 
@@ -235,7 +234,7 @@ class CorrelationIndex {
         compute_enabled_ = false;
         return false;
       } else {
-        // std::cout << "validation successful!" << std::endl;
+        // compute_enabled_ is set to true only if the node passed the validation.
         compute_enabled_ = true;
         return true;
       }
@@ -257,6 +256,7 @@ class CorrelationIndex {
         }
 
         if (compute_enabled_ == true) {
+          // std::cout << "compute enabled: " << outlier_buffer_.size() << " " << offset_span_ << " " << epsilon_ << std::endl;
           // estimate the host key via function computation
           uint64_t estimate_host = estimate(ip_guest);
           // get min and max bound based on estimated value
@@ -542,7 +542,6 @@ public:
       if (compute_ret == true) {
 
         bool validate_ret = node->validate();
-
         if (validate_ret == false) {
           CorrelationNode** new_nodes = nullptr;
           node->split(new_nodes);

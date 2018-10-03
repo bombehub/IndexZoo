@@ -180,6 +180,8 @@ private:
         std::vector<uint64_t> pkeys;
         
         index->lookup(key, pkeys);
+
+        // std::cout << "pkeys size = " << pkeys.size() << std::endl;
         
         std::vector<uint64_t> offsets;
 
@@ -273,13 +275,15 @@ private:
               sum += read_column_ret;
             }
           }
-        }
+        } 
+
+        // std::cout << "outliers size = " << outliers.size() << std::endl;
 
         // outliers are primary keys
         if (outliers.size() != 0) {
           
           std::vector<uint64_t> offsets;
-          
+
           primary_index_->lookup(outliers, offsets);
 
           for (auto offset : offsets) {
@@ -311,10 +315,6 @@ private:
         if (ret == true) {
           secondary_index_->range_lookup(lhs_host_key, rhs_host_key, offsets);
         }
-        // if (outliers.size() != 0) {
-        //   secondary_index_->lookup(outliers, offsets);
-        // }
-        // offsets.insert(offsets.end(), outliers.begin(), outliers.end());
 
         for (auto offset : offsets) {
           char *value = data_table_->get_tuple(offset);
@@ -481,10 +481,6 @@ private:
         for (auto host_key_range : host_key_ranges) {
           secondary_index_->range_lookup(host_key_range.first, host_key_range.second, pkeys); 
         }
-        // if (outliers.size() != 0) {
-        //   secondary_index_->lookup(outliers, pkeys);
-        // }
-        // pkeys.insert(pkeys.end(), outliers.begin(), outliers.end());
 
         std::vector<uint64_t> offsets;
 
@@ -544,9 +540,6 @@ private:
         for (auto host_key_range : host_key_ranges) {
           secondary_index_->range_lookup(host_key_range.first, host_key_range.second, offsets);
         }
-        // if (outliers.size() != 0) {
-        //   secondary_index_->lookup(outliers, offsets);
-        // }
 
         for (auto offset : offsets) {
           char *value = data_table_->get_tuple(offset);

@@ -90,7 +90,7 @@ class CorrelationIndex {
         for (uint64_t i = offset_begin_; i <= offset_end_; ++i) {
           uint64_t guest = container_ptr[i].guest_;
           uint64_t host = container_ptr[i].host_;
-          outlier_buffer_.insert( {guest, host} );
+          outlier_buffer_.insert( {guest, container_ptr[i].tuple_id_} );
         }
         return;
       }
@@ -119,7 +119,7 @@ class CorrelationIndex {
         for (uint64_t i = offset_begin_; i <= offset_end_; ++i) {
           uint64_t guest = container_ptr[i].guest_;
           uint64_t host = container_ptr[i].host_;
-          outlier_buffer_.insert( {guest, host} );
+          outlier_buffer_.insert( {guest, container_ptr[i].tuple_id_} );
         }
         return false;
       }
@@ -141,7 +141,7 @@ class CorrelationIndex {
         for (uint64_t i = offset_begin_; i <= offset_end_; ++i) {
           uint64_t guest = container_ptr[i].guest_;
           uint64_t host = container_ptr[i].host_;
-          outlier_buffer_.insert( {guest, host} );
+          outlier_buffer_.insert( {guest, container_ptr[i].tuple_id_} );
         }
         return false;
       }
@@ -226,7 +226,7 @@ class CorrelationIndex {
           outlier_buffer_.insert( {guest, tuple_id} );
         }
       }
-      
+
       if (outlier_buffer_.size() > offset_span_ * index_->params_.outlier_threshold_) {
 
         // std::cout << "validation failed: " << outlier_buffer_.size() << " " << offset_span_ << " " << offset_span_ * index_->outlier_threshold_ << std::endl;
@@ -486,6 +486,7 @@ public:
         container_[i].guest_ = guest_attr_ret;
         container_[i].host_ = host_attr_ret;
         container_[i].tuple_id_ = pkey;
+        // std::cout << "tuple id = " << pkey << std::endl;
         i++;
       }
 

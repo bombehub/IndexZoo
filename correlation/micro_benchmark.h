@@ -44,12 +44,13 @@ private:
       // linear distribution
       for (size_t tuple_id = 0; tuple_id < config_.tuple_count_; ++tuple_id) {
 
-        // uint64_t attr2 = tuple_id;
         uint64_t attr2 = rand_gen.next<uint64_t>() % config_.tuple_count_;
         uint64_t attr1 = attr2;
 
-        if (rand_gen.next_uniform() < config_.outlier_ratio_) {
-          attr1 *= 2;
+        if (rand_gen.next_uniform() < config_.outlier_ratio_ / 2) {
+          attr1 += attr1 * 1.05;
+        } else if (rand_gen.next_uniform() < config_.outlier_ratio_) {
+          attr1 -= attr1 * 0.95;
         }
 
         secondary_keys_.push_back(attr1);

@@ -4,6 +4,8 @@ FILE (GLOB_RECURSE SRC_LIST "*.cpp")
 
 ADD_EXECUTABLE (correlation_test correlation_test.cxx ${SRC_LIST})
 
+ADD_EXECUTABLE (insertion_test insertion_test.cxx ${SRC_LIST})
+
 TARGET_LINK_LIBRARIES (correlation_test indexzoo)
 TARGET_LINK_LIBRARIES (correlation_test jemalloc pthread)
 

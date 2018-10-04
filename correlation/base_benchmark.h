@@ -74,12 +74,21 @@ private:
 
   void build_table_base() {
 
+    primary_index_->construct(data_table_.get(), tuple_schema_, primary_column_id_, PhysicalPointerType);
+
+    secondary_index_->construct(data_table_.get(), tuple_schema_, secondary_column_id_, config_.index_pointer_type_);
+
     if (config_.access_type_ == BaselineIndexAccess) {
+
       baseline_index_->construct(data_table_.get(), tuple_schema_, correlation_column_id_, config_.index_pointer_type_);
+
     } else if (config_.access_type_ == CorrelationIndexAccess) {
+
       correlation_index_->construct(data_table_.get(), tuple_schema_, correlation_column_id_, secondary_column_id_, config_.index_pointer_type_);
+
       correlation_index_->print(config_.verbose_);
-    }
+
+}
 
     std::sort(primary_keys_.begin(), primary_keys_.end());
     std::sort(secondary_keys_.begin(), secondary_keys_.end());

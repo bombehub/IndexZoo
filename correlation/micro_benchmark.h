@@ -101,15 +101,15 @@ private:
       // insert into table
       OffsetT offset = data_table_->insert_tuple(tuple_key.raw(), tuple_key.size(), tuple_value.raw(), tuple_value.size());
 
-      // update primary index
-      primary_index_->insert(attr0, offset.raw_data());
+      // // update primary index
+      // primary_index_->insert(attr0, offset.raw_data());
 
-      // update secondary index
-      if (config_.index_pointer_type_ == LogicalPointerType) {
-        secondary_index_->insert(attr1, attr0);
-      } else {
-        secondary_index_->insert(attr1, offset.raw_data());
-      }
+      // // update secondary index
+      // if (config_.index_pointer_type_ == LogicalPointerType) {
+      //   secondary_index_->insert(attr1, attr0);
+      // } else {
+      //   secondary_index_->insert(attr1, offset.raw_data());
+      // }
 
     }
 

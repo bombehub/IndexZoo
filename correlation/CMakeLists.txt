@@ -9,6 +9,9 @@ ADD_EXECUTABLE (insertion_test insertion_test.cxx ${SRC_LIST})
 TARGET_LINK_LIBRARIES (correlation_test indexzoo)
 TARGET_LINK_LIBRARIES (correlation_test jemalloc pthread)
 
+TARGET_LINK_LIBRARIES (insertion_test indexzoo)
+TARGET_LINK_LIBRARIES (insertion_test jemalloc pthread)
+
 
 ADD_DEFINITIONS(-DWORDS_BIGENDIAN_SET=1)
 ADD_DEFINITIONS(-DSTDC_HEADERS=1)

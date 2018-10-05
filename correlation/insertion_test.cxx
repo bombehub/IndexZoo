@@ -14,7 +14,7 @@
 
 #include "correlation_common.h"
 
-void measure(const size_t secondary_index_count, const size_t init_tuple_count, const size_t insert_tuple_count, const IndexPointerType index_pointer_type) {
+void measure(const size_t secondary_index_count, const size_t init_tuple_count, const size_t insert_tuple_count, const IndexPointerType index_pointer_type, const bool measure_memory_only) {
   GenericDataTable *data_table = new GenericDataTable(sizeof(uint64_t), sizeof(uint64_t) * (secondary_index_count + 1));
   
   BTreeIndex *primary_index = new BTreeIndex();
@@ -23,6 +23,8 @@ void measure(const size_t secondary_index_count, const size_t init_tuple_count, 
   for (size_t i = 0; i < secondary_index_count; ++i) {
     secondary_index[i] = new BTreeIndex();
   }
+
+  double start_memory = get_memory_mb();
 
   FastRandom rand_gen(0);
 
@@ -62,6 +64,15 @@ void measure(const size_t secondary_index_count, const size_t init_tuple_count, 
         secondary_index[k]->insert(attr_secondary[k], offset.raw_data()); 
       }
     }
+  }
+
+
+  double end_memory = get_memory_mb();
+
+  std::cout << "memory: " << (end_memory - start_memory) << " MB" << std::endl;
+
+  if (measure_memory_only == true) {
+    return;
   }
 
   TimeMeasurer timer;
@@ -106,6 +117,8 @@ void measure(const size_t secondary_index_count, const size_t init_tuple_count, 
   timer.toc();
   timer.print_us();
 
+  std::cout << "throughput: " << insert_tuple_count * 1.0 / timer.time_us() << " M ops" << std::endl;
+
   delete[] attr_secondary;
   attr_secondary = nullptr;
 
@@ -125,10 +138,10 @@ void measure(const size_t secondary_index_count, const size_t init_tuple_count, 
 
 
 int main(int argc, char *argv[]) {
-  if (argc != 5) {
-    std::cerr << "usage: " << argv[0] << " secondary_index_count init_tuple_count insert_tuple_count pointer_type" << std::endl;
+  if (argc != 6) {
+    std::cerr << "usage: " << argv[0] << " secondary_index_count init_tuple_count insert_tuple_count pointer_type measure_memory_only" << std::endl;
     return -1;
   }
 
-  measure(atoi(argv[1]), atoi(argv[2]), atoi(argv[3]), IndexPointerType(atoi(argv[4])));
+  measure(atoi(argv[1]), atoi(argv[2]), atoi(argv[3]), IndexPointerType(atoi(argv[4])), bool(atoi(argv[5])));
 }

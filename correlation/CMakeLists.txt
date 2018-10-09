@@ -6,12 +6,16 @@ ADD_EXECUTABLE (correlation_test correlation_test.cxx ${SRC_LIST})
 
 ADD_EXECUTABLE (insertion_test insertion_test.cxx ${SRC_LIST})
 
+ADD_EXECUTABLE (postgres_test postgres_test.cxx ${SRC_LIST})
+
 TARGET_LINK_LIBRARIES (correlation_test indexzoo)
 TARGET_LINK_LIBRARIES (correlation_test jemalloc pthread)
 
 TARGET_LINK_LIBRARIES (insertion_test indexzoo)
 TARGET_LINK_LIBRARIES (insertion_test jemalloc pthread)
 
+TARGET_LINK_LIBRARIES (postgres_test indexzoo)
+TARGET_LINK_LIBRARIES (postgres_test jemalloc pthread pqxx pq)
 
 ADD_DEFINITIONS(-DWORDS_BIGENDIAN_SET=1)
 ADD_DEFINITIONS(-DSTDC_HEADERS=1)
@@ -30,5 +34,13 @@ ADD_DEFINITIONS(-DHAVE___BUILTIN_CLZL=1)
 
 
 INSTALL (TARGETS correlation_test 
+    RUNTIME DESTINATION bin
+    )
+
+INSTALL (TARGETS insertion_test 
+    RUNTIME DESTINATION bin
+    )
+
+INSTALL (TARGETS postgres_test 
     RUNTIME DESTINATION bin
     )

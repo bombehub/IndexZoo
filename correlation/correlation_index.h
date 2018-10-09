@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <queue>
 #include <fstream>
+#include <algorithm>
 
 #include "generic_key.h"
 #include "generic_data_table.h"
@@ -514,6 +515,67 @@ public:
     }
 
     ASSERT(i == size_, "incorrect loading");
+
+    // sort data
+    std::sort(container_, container_ + size_, compare_func);
+
+    root_node_ = new CorrelationNode(this, 0, size_ - 1, 0);
+
+    std::queue<CorrelationNode*> nodes;
+    nodes.push(root_node_);
+
+    while (!nodes.empty()) {
+      auto *node = nodes.front();
+      nodes.pop();
+
+      node_count_++;
+
+      if (node->get_level() >= max_level_) {
+        max_level_ = node->get_level();
+      }
+
+      bool compute_ret;
+      if (params_.compute_type_ == InterpolationType) {
+        compute_ret = node->compute_interpolation();
+      } else {
+        compute_ret = node->compute_regression();
+      }
+
+      if (compute_ret == true) {
+
+        bool validate_ret = node->validate();
+        if (validate_ret == false) {
+          CorrelationNode** new_nodes = nullptr;
+          node->split(new_nodes);
+          if (new_nodes != nullptr) {
+            for (size_t i = 0; i < params_.fanout_; i++) {
+              nodes.push(new_nodes[i]);
+            }
+          }
+        }
+      }
+    }
+
+    delete[] container_;
+    container_ = nullptr;
+  }
+
+
+
+  void construct(const std::vector<uint64_t> &guest_column_entries, const std::vector<uint64_t> &host_column_entries, const std::vector<uint64_t> &primary_column_entries) {
+
+    ASSERT(guest_column_entries.size() == host_column_entries.size(), "mismatch: " << guest_column_entries.size() << " " << host_column_entries.size());
+    ASSERT(guest_column_entries.size() == primary_column_entries.size(), "mismatch: " << guest_column_entries.size() << " " << primary_column_entries.size());
+
+    size_ = primary_column_entries.size();
+
+    container_ = new AttributePair[size_];
+
+    for (size_t i = 0; i < size_; ++i) {
+      container_[i].guest_ = guest_column_entries.at(i);
+      container_[i].host_ = host_column_entries.at(i);
+      container_[i].tuple_id_ = primary_column_entries.at(i);
+    }
 
     // sort data
     std::sort(container_, container_ + size_, compare_func);

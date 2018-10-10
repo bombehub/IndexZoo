@@ -99,7 +99,7 @@ private:
   void run_queries() {
 
     uint64_t sum = 0;
-    std::unordered_set<uint64_t> result_set;
+    // std::unordered_set<uint64_t> result_set;
     
     if (config_.query_type_ == PointQueryType) {
       // point query
@@ -108,13 +108,13 @@ private:
         sum = primary_index_lookup();
         break;
         case SecondaryIndexAccess:
-        sum = secondary_index_lookup(result_set);
+        sum = secondary_index_lookup();
         break;
         case BaselineIndexAccess:
-        sum = baseline_index_lookup(result_set);
+        sum = baseline_index_lookup();
         break;
         case CorrelationIndexAccess:
-        sum = correlation_index_lookup(result_set);
+        sum = correlation_index_lookup();
         break;
         default:
         break;
@@ -126,20 +126,20 @@ private:
         sum = primary_index_range_lookup();
         break;
         case SecondaryIndexAccess:
-        sum = secondary_index_range_lookup(result_set);
+        sum = secondary_index_range_lookup();
         break;
         case BaselineIndexAccess:
-        sum = baseline_index_range_lookup(result_set);
+        sum = baseline_index_range_lookup();
         break;
         case CorrelationIndexAccess:
-        sum = correlation_index_range_lookup(result_set);
+        sum = correlation_index_range_lookup();
         break;
         default:
         break;
       }
     }
     std::cout << "sum: " << sum << std::endl;
-    std::cout << "result set size: " << result_set.size() << std::endl;
+    // std::cout << "result set size: " << result_set.size() << std::endl;
   }
 
 
@@ -173,7 +173,7 @@ private:
 
   }
 
-  uint64_t secondary_index_lookup_base(BTreeIndex *index, std::vector<uint64_t> &keys, std::unordered_set<uint64_t> &result_set) {
+  uint64_t secondary_index_lookup_base(BTreeIndex *index, std::vector<uint64_t> &keys) {
 
     size_t key_count = keys.size();
 
@@ -201,8 +201,6 @@ private:
           uint64_t read_column_ret = *(uint64_t*)(value + read_column_offset);
 
           sum += read_column_ret;
-
-          result_set.insert(offset);
         }
       }
 
@@ -222,8 +220,6 @@ private:
           uint64_t read_column_ret = *(uint64_t*)(value + read_column_offset);
 
           sum += read_column_ret;
-
-          result_set.insert(offset);
         }
       }
 
@@ -232,15 +228,15 @@ private:
     return sum;    
   }
 
-  uint64_t secondary_index_lookup(std::unordered_set<uint64_t> &result_set) {
-    return secondary_index_lookup_base(secondary_index_.get(), secondary_keys_, result_set);
+  uint64_t secondary_index_lookup() {
+    return secondary_index_lookup_base(secondary_index_.get(), secondary_keys_);
   }
 
-  uint64_t baseline_index_lookup(std::unordered_set<uint64_t> &result_set) {
-    return secondary_index_lookup_base(baseline_index_.get(), correlation_keys_, result_set);
+  uint64_t baseline_index_lookup() {
+    return secondary_index_lookup_base(baseline_index_.get(), correlation_keys_);
   }
 
-  uint64_t correlation_index_lookup(std::unordered_set<uint64_t> &result_set) {
+  uint64_t correlation_index_lookup() {
 
     auto &keys = correlation_keys_;
     size_t key_count = keys.size();
@@ -252,6 +248,8 @@ private:
     if (config_.index_pointer_type_ == LogicalPointerType) {
 
       for (size_t query_id = 0; query_id < config_.query_count_; ++query_id) {
+
+        std::unordered_set<uint64_t> result_set;
 
         uint64_t key = keys.at(rand_gen.next<uint64_t>() % key_count);
 
@@ -319,6 +317,8 @@ private:
     } else {
 
       for (size_t query_id = 0; query_id < config_.query_count_; ++query_id) {
+
+        std::unordered_set<uint64_t> result_set;
 
         uint64_t key = keys.at(rand_gen.next<uint64_t>() % key_count);
 
@@ -411,7 +411,7 @@ private:
 
   }
 
-  uint64_t secondary_index_range_lookup_base(BTreeIndex *index, std::vector<uint64_t> &keys, std::unordered_set<uint64_t> &result_set) {
+  uint64_t secondary_index_range_lookup_base(BTreeIndex *index, std::vector<uint64_t> &keys) {
 
     size_t key_count = keys.size();
 
@@ -443,8 +443,6 @@ private:
           uint64_t read_column_ret = *(uint64_t*)(value + read_column_offset);
           
           sum += read_column_ret;
-
-          result_set.insert(offset);
         }
       }
 
@@ -468,8 +466,6 @@ private:
           uint64_t read_column_ret = *(uint64_t*)(value + read_column_offset);
 
           sum += read_column_ret;
-
-          result_set.insert(offset);
         }
       }
 
@@ -478,15 +474,15 @@ private:
     return sum;    
   }
 
-  uint64_t secondary_index_range_lookup(std::unordered_set<uint64_t> &result_set) {
-    return secondary_index_range_lookup_base(secondary_index_.get(), secondary_keys_, result_set);
+  uint64_t secondary_index_range_lookup() {
+    return secondary_index_range_lookup_base(secondary_index_.get(), secondary_keys_);
   }
 
-  uint64_t baseline_index_range_lookup(std::unordered_set<uint64_t> &result_set) {
-    return secondary_index_range_lookup_base(baseline_index_.get(), correlation_keys_, result_set);
+  uint64_t baseline_index_range_lookup() {
+    return secondary_index_range_lookup_base(baseline_index_.get(), correlation_keys_);
   }
 
-  uint64_t correlation_index_range_lookup(std::unordered_set<uint64_t> &result_set) {
+  uint64_t correlation_index_range_lookup() {
 
     auto &keys = correlation_keys_;
     size_t key_count = keys.size();
@@ -498,6 +494,8 @@ private:
     if (config_.index_pointer_type_ == LogicalPointerType) {
 
       for (size_t query_id = 0; query_id < config_.query_count_; ++query_id) {
+
+        std::unordered_set<uint64_t> result_set;
 
         size_t lhs_key_id = rand_gen.next_uniform() * (1 - config_.selectivity_) * key_count;
         size_t rhs_key_id = lhs_key_id + config_.selectivity_ * key_count;
@@ -566,6 +564,8 @@ private:
     } else {
 
       for (size_t query_id = 0; query_id < config_.query_count_; ++query_id) {
+
+        std::unordered_set<uint64_t> result_set;
 
         size_t lhs_key_id = rand_gen.next_uniform() * (1 - config_.selectivity_) * key_count;
         size_t rhs_key_id = lhs_key_id + config_.selectivity_ * key_count;

@@ -88,7 +88,7 @@ private:
 
       correlation_index_->print(config_.verbose_);
 
-}
+    }
 
     std::sort(primary_keys_.begin(), primary_keys_.end());
     std::sort(secondary_keys_.begin(), secondary_keys_.end());
@@ -98,47 +98,48 @@ private:
 
   void run_queries() {
 
+    uint64_t sum = 0;
+    std::unordered_set<uint64_t> result_set;
+    
     if (config_.query_type_ == PointQueryType) {
       // point query
-      uint64_t sum = 0;
       switch (config_.access_type_) {
         case PrimaryIndexAccess:
         sum = primary_index_lookup();
         break;
         case SecondaryIndexAccess:
-        sum = secondary_index_lookup();
+        sum = secondary_index_lookup(result_set);
         break;
         case BaselineIndexAccess:
-        sum = baseline_index_lookup();
+        sum = baseline_index_lookup(result_set);
         break;
         case CorrelationIndexAccess:
-        sum = correlation_index_lookup();
+        sum = correlation_index_lookup(result_set);
         break;
         default:
         break;
       }
-      std::cout << "sum: " << sum << std::endl;
     } else {
       // range query
-      uint64_t sum = 0;
       switch (config_.access_type_) {
         case PrimaryIndexAccess:
         sum = primary_index_range_lookup();
         break;
         case SecondaryIndexAccess:
-        sum = secondary_index_range_lookup();
+        sum = secondary_index_range_lookup(result_set);
         break;
         case BaselineIndexAccess:
-        sum = baseline_index_range_lookup();
+        sum = baseline_index_range_lookup(result_set);
         break;
         case CorrelationIndexAccess:
-        sum = correlation_index_range_lookup();
+        sum = correlation_index_range_lookup(result_set);
         break;
         default:
         break;
       }
-      std::cout << "sum: " << sum << std::endl;
     }
+    std::cout << "sum: " << sum << std::endl;
+    std::cout << "result set size: " << result_set.size() << std::endl;
   }
 
 
@@ -172,7 +173,7 @@ private:
 
   }
 
-  uint64_t secondary_index_lookup_base(BTreeIndex *index, std::vector<uint64_t> &keys) {
+  uint64_t secondary_index_lookup_base(BTreeIndex *index, std::vector<uint64_t> &keys, std::unordered_set<uint64_t> &result_set) {
 
     size_t key_count = keys.size();
 
@@ -190,8 +191,6 @@ private:
         
         index->lookup(key, pkeys);
 
-        // std::cout << "pkeys size = " << pkeys.size() << std::endl;
-        
         std::vector<uint64_t> offsets;
 
         primary_index_->lookup(pkeys, offsets);
@@ -202,6 +201,8 @@ private:
           uint64_t read_column_ret = *(uint64_t*)(value + read_column_offset);
 
           sum += read_column_ret;
+
+          result_set.insert(offset);
         }
       }
 
@@ -221,6 +222,8 @@ private:
           uint64_t read_column_ret = *(uint64_t*)(value + read_column_offset);
 
           sum += read_column_ret;
+
+          result_set.insert(offset);
         }
       }
 
@@ -229,15 +232,15 @@ private:
     return sum;    
   }
 
-  uint64_t secondary_index_lookup() {
-    return secondary_index_lookup_base(secondary_index_.get(), secondary_keys_);
+  uint64_t secondary_index_lookup(std::unordered_set<uint64_t> &result_set) {
+    return secondary_index_lookup_base(secondary_index_.get(), secondary_keys_, result_set);
   }
 
-  uint64_t baseline_index_lookup() {
-    return secondary_index_lookup_base(baseline_index_.get(), correlation_keys_);
+  uint64_t baseline_index_lookup(std::unordered_set<uint64_t> &result_set) {
+    return secondary_index_lookup_base(baseline_index_.get(), correlation_keys_, result_set);
   }
 
-  uint64_t correlation_index_lookup() {
+  uint64_t correlation_index_lookup(std::unordered_set<uint64_t> &result_set) {
 
     auto &keys = correlation_keys_;
     size_t key_count = keys.size();
@@ -263,15 +266,14 @@ private:
 
           std::vector<uint64_t> pkeys;
 
-          secondary_index_->range_lookup(lhs_host_key, rhs_host_key, pkeys); 
-
-          // std::cout << "pkeys size = " << pkeys.size() << " " << lhs_host_key << " " << rhs_host_key << std::endl;
+          secondary_index_->range_lookup(lhs_host_key, rhs_host_key, pkeys);
 
           std::vector<uint64_t> offsets;
 
           primary_index_->lookup(pkeys, offsets);
 
           for (auto offset : offsets) {
+
             char *value = data_table_->get_tuple(offset);
             
             size_t correlation_column_offset = tuple_schema_.get_attr_offset(correlation_column_id_);
@@ -282,11 +284,11 @@ private:
               uint64_t read_column_ret = *(uint64_t*)(value + read_column_offset);
 
               sum += read_column_ret;
+
+              result_set.insert(offset);
             }
           }
         } 
-
-        // std::cout << "outliers size = " << outliers.size() << std::endl;
 
         // outliers are primary keys
         if (outliers.size() != 0) {
@@ -296,11 +298,19 @@ private:
           primary_index_->lookup(outliers, offsets);
 
           for (auto offset : offsets) {
+
+            // check whether the outlier has already been in the result set.
+            if (result_set.find(offset) != result_set.end()) {
+              continue;
+            }
+
             char *value = data_table_->get_tuple(offset);
             size_t read_column_offset = tuple_schema_.get_attr_offset(read_column_id_);
             uint64_t read_column_ret = *(uint64_t*)(value + read_column_offset);
 
             sum += read_column_ret;
+
+            result_set.insert(offset);
           }
         }
 
@@ -319,33 +329,44 @@ private:
         // find host key range
         bool ret = correlation_index_->lookup(key, lhs_host_key, rhs_host_key, outliers);
 
-        std::vector<uint64_t> offsets;
-
         if (ret == true) {
+  
+          std::vector<uint64_t> offsets;
+  
           secondary_index_->range_lookup(lhs_host_key, rhs_host_key, offsets);
-        }
 
-        for (auto offset : offsets) {
-          char *value = data_table_->get_tuple(offset);
-          
-          size_t correlation_column_offset = tuple_schema_.get_attr_offset(correlation_column_id_);
-          uint64_t correlation_column_ret = *(uint64_t*)(value + correlation_column_offset);
+          for (auto offset : offsets) {
+            char *value = data_table_->get_tuple(offset);
+            
+            size_t correlation_column_offset = tuple_schema_.get_attr_offset(correlation_column_id_);
+            uint64_t correlation_column_ret = *(uint64_t*)(value + correlation_column_offset);
 
-          if (correlation_column_ret == key) {
-            size_t read_column_offset = tuple_schema_.get_attr_offset(read_column_id_);
-            uint64_t read_column_ret = *(uint64_t*)(value + read_column_offset);
+            if (correlation_column_ret == key) {
+              size_t read_column_offset = tuple_schema_.get_attr_offset(read_column_id_);
+              uint64_t read_column_ret = *(uint64_t*)(value + read_column_offset);
 
-            sum += read_column_ret;
+              sum += read_column_ret;
+
+              result_set.insert(offset);
+            }
           }
         }
 
         // outliers are offsets
         for (auto offset : outliers) {
+
+          // check whether the outlier has already been in the result set.
+          if (result_set.find(offset) != result_set.end()) {
+            continue;
+          }
+
           char *value = data_table_->get_tuple(offset);
           size_t read_column_offset = tuple_schema_.get_attr_offset(read_column_id_);
           uint64_t read_column_ret = *(uint64_t*)(value + read_column_offset);
 
           sum += read_column_ret;
+
+          result_set.insert(offset);
         }
 
       }
@@ -390,7 +411,7 @@ private:
 
   }
 
-  uint64_t secondary_index_range_lookup_base(BTreeIndex *index, std::vector<uint64_t> &keys) {
+  uint64_t secondary_index_range_lookup_base(BTreeIndex *index, std::vector<uint64_t> &keys, std::unordered_set<uint64_t> &result_set) {
 
     size_t key_count = keys.size();
 
@@ -420,7 +441,10 @@ private:
           char *value = data_table_->get_tuple(offset);
           size_t read_column_offset = tuple_schema_.get_attr_offset(read_column_id_);
           uint64_t read_column_ret = *(uint64_t*)(value + read_column_offset);
+          
           sum += read_column_ret;
+
+          result_set.insert(offset);
         }
       }
 
@@ -444,6 +468,8 @@ private:
           uint64_t read_column_ret = *(uint64_t*)(value + read_column_offset);
 
           sum += read_column_ret;
+
+          result_set.insert(offset);
         }
       }
 
@@ -452,15 +478,15 @@ private:
     return sum;    
   }
 
-  uint64_t secondary_index_range_lookup() {
-    return secondary_index_range_lookup_base(secondary_index_.get(), secondary_keys_);
+  uint64_t secondary_index_range_lookup(std::unordered_set<uint64_t> &result_set) {
+    return secondary_index_range_lookup_base(secondary_index_.get(), secondary_keys_, result_set);
   }
 
-  uint64_t baseline_index_range_lookup() {
-    return secondary_index_range_lookup_base(baseline_index_.get(), correlation_keys_);
+  uint64_t baseline_index_range_lookup(std::unordered_set<uint64_t> &result_set) {
+    return secondary_index_range_lookup_base(baseline_index_.get(), correlation_keys_, result_set);
   }
 
-  uint64_t correlation_index_range_lookup() {
+  uint64_t correlation_index_range_lookup(std::unordered_set<uint64_t> &result_set) {
 
     auto &keys = correlation_keys_;
     size_t key_count = keys.size();
@@ -506,6 +532,8 @@ private:
             uint64_t read_column_ret = *(uint64_t*)(value + read_column_offset);
 
             sum += read_column_ret;
+
+            result_set.insert(offset);
           }
         }
 
@@ -517,11 +545,18 @@ private:
           primary_index_->lookup(outliers, offsets);
 
           for (auto offset : offsets) {
+
+            if (result_set.find(offset) != result_set.end()) {
+              continue;
+            }
+
             char *value = data_table_->get_tuple(offset);
             size_t read_column_offset = tuple_schema_.get_attr_offset(read_column_id_);
             uint64_t read_column_ret = *(uint64_t*)(value + read_column_offset);
 
             sum += read_column_ret;
+
+            result_set.insert(offset);
           }
 
         }
@@ -566,11 +601,18 @@ private:
 
         // outliers are offsets
         for (auto offset : outliers) {
+
+          if (result_set.find(offset) != result_set.end()) {
+            continue;
+          }
+
           char *value = data_table_->get_tuple(offset);
           size_t read_column_offset = tuple_schema_.get_attr_offset(read_column_id_);
           uint64_t read_column_ret = *(uint64_t*)(value + read_column_offset);
 
           sum += read_column_ret;
+
+          result_set.insert(offset);
         }
 
       }

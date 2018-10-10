@@ -1,5 +1,7 @@
 import csv
 import matplotlib.pyplot as plt
+import os
+import random
 
 if __name__ == "__main__":
   times = []
@@ -8,36 +10,43 @@ if __name__ == "__main__":
   totals = []
   tips = []
 
-  with open('/home/yingjun/Downloads/chicago_taxi_trips_2016_01.csv') as csvfile:
-    rows = csv.reader(csvfile, delimiter = ',')
-    
-    count = 0
-    for row in rows:
-      if count > 1:
-        if row[3] == '' or row[4] == '' or row[9] == '':
+  os.chdir('/home/yingjun/Downloads/chicago-taxi-rides-2016')
+
+  filenames = [x for x in os.listdir('.') if x.endswith('csv') and os.path.getsize(x) > 0]
+  print(len(filenames))
+
+  # filenames = random.sample(filenames, 10)
+  print(filenames)
+
+  count = 0
+  for filename in filenames:
+    with open(filename) as csvfile:
+      
+      is_begin = True
+      rows = csv.reader(csvfile, delimiter = ',')
+      
+      for row in rows:
+
+        if is_begin == True:
+          is_begin = False
           continue
-        if float(row[4]) < 1:
-          # print(row[4] + ' ' + row[9])
-          continue
-        # if float(row[3]) > 1000:
-          # continue
-        if float(row[4]) > 50:
-          continue
-        times.append(float(row[4]))
-        distances.append(float(row[9]))
-        # fares.append(float(row[4])) 
-        # tips.append(float(row[14]))
-        # totals.append(float(row[16]))
-      # if count > 10000:
-        # break
-      count += 1
-  # print(times)
-  # print(distances)
-  # print(fares)
-  # print(totals)
+
+        if len(row) > 10:
+          if row[3] == '' or row[4] == '' or row[9] == '':
+            continue
+          # if float(row[4]) < 1:
+            # print(row[4] + ' ' + row[9])
+            # continue
+          if float(row[3]) > 1000 or float(row[3]) < 10:
+            continue
+          if float(row[4]) > 100 or float(row[4]) < 2:
+            continue
+          times.append(float(row[3]))
+          distances.append(float(row[4]))
+          fares.append(float(row[9]))
+        count += 1
+        if count > 50000:
+          break
   print count
-  # plt.plot(times, distances, 'ro')
-  # plt.plot(distances, times, 'ro')
-  # plt.plot(distances, totals, 'bo')
-  # plt.show()
-  
+  plt.plot(distances, fares, 'ro')
+  plt.show()

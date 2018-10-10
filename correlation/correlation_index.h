@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <set>
 #include <map>
 #include <unordered_map>
 #include <queue>
@@ -56,10 +57,10 @@ class CorrelationIndex {
       slope_ = INVALID_DOUBLE;
       intercept_ = INVALID_DOUBLE;
 
-      double density = std::abs(offset_span_ * 1.0 / (host_end_ - host_begin_));
-      epsilon_ = std::ceil(index_->params_.error_bound_ * 1.0 / density / 2);
+      // double density = std::abs(offset_span_ * 1.0 / (host_end_ - host_begin_));
+      // epsilon_ = std::ceil(index_->params_.error_bound_ * 1.0 / density / 2);
 
-      // epsilon_ = (host_end_ - host_begin_) * index_->params_.error_bound_;
+      epsilon_ = (host_end_ - host_begin_) * index_->params_.error_bound_;
 
       level_ = level;
 
@@ -82,10 +83,12 @@ class CorrelationIndex {
 
     void split(CorrelationNode** &new_nodes) {
       ASSERT(children_ == nullptr && children_count_ == 0, "children must be unassigned");
-
+      assert(compute_enabled_ == false);
       outlier_buffer_.clear();
 
       auto *container_ptr = index_->container_;
+      // if reaches the max height, 
+      // then directly insert all the nodes into the outlier buffer
       if (level_ == index_->params_.max_height_ - 1) {
 
         for (uint64_t i = offset_begin_; i <= offset_end_; ++i) {
@@ -93,19 +96,68 @@ class CorrelationIndex {
           uint64_t host = container_ptr[i].host_;
           outlier_buffer_.insert( {guest, container_ptr[i].tuple_id_} );
         }
+        new_nodes = nullptr;
         return;
       }
 
+      ///////////////////////////////////////////////////
+      // split node by tuple count
+      ///////////////////////////////////////////////////
+      // children_count_ = index_->params_.fanout_;
+      
+      // children_ = new CorrelationNode*[children_count_];
+      // children_index_ = new uint64_t[children_count_];
+      // for (size_t i = 0; i < children_count_ - 1; ++i) {
+      //   children_[i] = new CorrelationNode(index_, offset_begin_ + child_offset_span_ * i, offset_begin_ + child_offset_span_ * (i + 1) - 1, level_ + 1);
+      //   children_index_[i] = container_ptr[offset_begin_ + child_offset_span_ * (i + 1)].guest_;
+      // }
+      // children_[children_count_ - 1] = new CorrelationNode(index_, offset_begin_ + child_offset_span_ * (children_count_ - 1), offset_end_, level_ + 1);
+      ///////////////////////////////////////////////////
+
+      ///////////////////////////////////////////////////
+      // split node by guest key range
+      ///////////////////////////////////////////////////
+      uint64_t guest_offset_span = (guest_end_ - guest_begin_ + 1) / index_->params_.fanout_;
+
+      std::vector<uint64_t> offset_split_point;
+      offset_split_point.push_back(offset_begin_);
+
+      uint64_t guest_next_point = guest_begin_ + guest_offset_span;
+      
+      for (uint64_t i = offset_begin_ + 1; i <= offset_end_; ++i) {
+        if (container_ptr[i].guest_ > guest_next_point) {
+          offset_split_point.push_back(i);
+          if (offset_split_point.size() == index_->params_.fanout_) {
+            break;
+          }
+          guest_next_point += guest_offset_span;
+        }
+      }
+
+      if (offset_split_point.size() < index_->params_.fanout_) {
+        for (uint64_t i = offset_begin_; i <= offset_end_; ++i) {
+          uint64_t guest = container_ptr[i].guest_;
+          uint64_t host = container_ptr[i].host_;
+          outlier_buffer_.insert( {guest, container_ptr[i].tuple_id_} );
+        }
+        new_nodes = nullptr;
+        return;
+      }
+
+      ASSERT(offset_split_point.size() == index_->params_.fanout_, "mismatch: " << offset_split_point.size() << " " << index_->params_.fanout_);
+      
       children_count_ = index_->params_.fanout_;
       
       children_ = new CorrelationNode*[children_count_];
       children_index_ = new uint64_t[children_count_];
 
       for (size_t i = 0; i < children_count_ - 1; ++i) {
-        children_[i] = new CorrelationNode(index_, offset_begin_ + child_offset_span_ * i, offset_begin_ + child_offset_span_ * (i + 1) - 1, level_ + 1);
-        children_index_[i] = container_ptr[offset_begin_ + child_offset_span_ * (i + 1)].guest_;
+        children_[i] = new CorrelationNode(index_, offset_split_point.at(i), offset_split_point.at(i + 1) - 1, level_ + 1);
+        children_index_[i] = container_ptr[offset_split_point.at(i + 1)].guest_;
       }
-      children_[children_count_ - 1] = new CorrelationNode(index_, offset_begin_ + child_offset_span_ * (children_count_ - 1), offset_end_, level_ + 1);
+      children_[children_count_ - 1] = new CorrelationNode(index_, offset_split_point.at(children_count_ - 1), offset_end_, level_ + 1);
+
+      ///////////////////////////////////////////////////
       
       new_nodes = children_;
     }
@@ -113,7 +165,7 @@ class CorrelationIndex {
     // if true, then computed. otherwise, all data are in outlier buffer.
     bool compute_interpolation() {
 
-      if (offset_span_ <= index_->params_.min_node_size_) {
+      if (offset_span_ <= index_->params_.min_node_size_ || guest_end_ == guest_begin_) {
 
         auto *container_ptr = index_->container_;
 
@@ -124,8 +176,6 @@ class CorrelationIndex {
         }
         return false;
       }
-
-      ASSERT(guest_end_ != guest_begin_, "guest_end_ cannot be equal to guest_begin_");
 
       slope_ = (host_end_ - host_begin_) * 1.0 / (guest_end_ - guest_begin_);
       intercept_ = host_begin_ - slope_ * guest_begin_;
@@ -222,7 +272,6 @@ class CorrelationIndex {
 
         if (estimate_host_lhs > host || estimate_host_rhs < host) {
           // if not in the range
-          // std::cout << estimate_host_lhs << " " << host << " " << estimate_host_rhs << std::endl;
           uint64_t tuple_id = container_ptr[i].tuple_id_;
           outlier_buffer_.insert( {guest, tuple_id} );
         }
@@ -230,8 +279,6 @@ class CorrelationIndex {
 
       if (outlier_buffer_.size() > offset_span_ * index_->params_.outlier_threshold_) {
 
-        // std::cout << "validation failed: " << outlier_buffer_.size() << " " << offset_span_ << " " << offset_span_ * index_->outlier_threshold_ << std::endl;
-        // std::cout << "param: " << slope_ << " " << intercept_ << std::endl;
         compute_enabled_ = false;
         return false;
       } else {
@@ -257,7 +304,6 @@ class CorrelationIndex {
         }
 
         if (compute_enabled_ == true) {
-          // std::cout << "compute enabled: " << outlier_buffer_.size() << " " << offset_span_ << " " << epsilon_ << std::endl;
           // estimate the host key via function computation
           uint64_t estimate_host = estimate(ip_guest);
           // get min and max bound based on estimated value
@@ -595,6 +641,7 @@ public:
         max_level_ = node->get_level();
       }
 
+      // compute return false only if offset_span_ <= min_node_size_
       bool compute_ret;
       if (params_.compute_type_ == InterpolationType) {
         compute_ret = node->compute_interpolation();

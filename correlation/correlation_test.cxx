@@ -39,7 +39,6 @@ void usage(FILE *out) {
           "                              -- (0) micro benchmark (default) \n"
           "                              -- (1) taxi benchmark \n"
           "                              -- (2) flight benchmark \n"
-          "                              -- (3) TBD \n"
           "  -d --distribution        : distribution type \n"
           "                              -- (0) linear (default) \n"
           "                              -- (1) sigmoid \n"
@@ -196,6 +195,9 @@ int main(int argc, char *argv[]) {
 
     benchmark.reset(new FlightBenchmark(config));
 
+  } else {
+    ASSERT(false, "false");
+    exit(EXIT_FAILURE);
   }
 
   benchmark->run_workload();

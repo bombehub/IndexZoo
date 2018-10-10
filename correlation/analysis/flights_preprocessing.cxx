@@ -35,7 +35,6 @@ int main() {
       fwrite(&air_time, sizeof(air_time), 1, dst_file);
       fwrite(&distance, sizeof(distance), 1, dst_file);
     }
-    // if (count > 5) { break; }
     ++count;
   }
 

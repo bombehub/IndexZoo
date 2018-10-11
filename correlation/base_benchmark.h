@@ -99,7 +99,6 @@ private:
   void run_queries() {
 
     uint64_t sum = 0;
-    // std::unordered_set<uint64_t> result_set;
     
     if (config_.query_type_ == PointQueryType) {
       // point query
@@ -139,7 +138,6 @@ private:
       }
     }
     std::cout << "sum: " << sum << std::endl;
-    // std::cout << "result set size: " << result_set.size() << std::endl;
   }
 
 

@@ -21,7 +21,8 @@
 #include "micro_benchmark.h"
 #include "taxi_benchmark.h"
 #include "flight_benchmark.h"
-
+#include "sensor_benchmark.h"
+#include "stock_benchmark.h"
 
 void usage(FILE *out) {
   fprintf(out,
@@ -39,6 +40,8 @@ void usage(FILE *out) {
           "                              -- (0) micro benchmark (default) \n"
           "                              -- (1) taxi benchmark \n"
           "                              -- (2) flight benchmark \n"
+          "                              -- (3) sensor benchmark \n"
+          "                              -- (4) stock benchmark \n"
           "  -d --distribution        : distribution type \n"
           "                              -- (0) linear (default) \n"
           "                              -- (1) sigmoid \n"
@@ -174,8 +177,6 @@ void parse_args(int argc, char* argv[], Config &config) {
 }
 
 
-
-
 int main(int argc, char *argv[]) {
 
   Config config;
@@ -194,6 +195,14 @@ int main(int argc, char *argv[]) {
   } else if (config.benchmark_type_ == FlightBenchmarkType) {
 
     benchmark.reset(new FlightBenchmark(config));
+
+  } else if (config.benchmark_type_ == SensorBenchmarkType) {
+
+    benchmark.reset(new SensorBenchmark(config));
+
+  } else if (config.benchmark_type_ == StockBenchmarkType) {
+
+    benchmark.reset(new StockBenchmark(config));
 
   } else {
     ASSERT(false, "false");

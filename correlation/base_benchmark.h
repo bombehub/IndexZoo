@@ -179,6 +179,11 @@ private:
 
     FastRandom rand_gen;
 
+    long long secondary_index_time = 0;
+    long long primary_index_time = 0;
+    long long base_table_time = 0;
+    TimeMeasurer timer;
+
     if (config_.index_pointer_type_ == LogicalPointerType) {
 
       for (size_t query_id = 0; query_id < config_.query_count_; ++query_id) {
@@ -187,12 +192,19 @@ private:
 
         std::vector<uint64_t> pkeys;
         
+        timer.tic();
         index->lookup(key, pkeys);
+        timer.toc();
+        secondary_index_time += timer.time_us();
 
         std::vector<uint64_t> offsets;
 
+        timer.tic();
         primary_index_->lookup(pkeys, offsets);
+        timer.toc();
+        primary_index_time += timer.time_us();
 
+        timer.tic();
         for (auto offset : offsets) {
           char *value = data_table_->get_tuple(offset);
           size_t read_column_offset = tuple_schema_.get_attr_offset(read_column_id_);
@@ -200,6 +212,8 @@ private:
 
           sum += read_column_ret;
         }
+        timer.toc();
+        base_table_time += timer.time_us();
       }
 
     } else {
@@ -210,8 +224,12 @@ private:
 
         std::vector<uint64_t> offsets;
         
+        timer.tic();        
         index->lookup(key, offsets);
-        
+        timer.toc();
+        secondary_index_time += timer.time_us();
+
+        timer.tic();
         for (auto offset : offsets) {
           char *value = data_table_->get_tuple(offset);
           size_t read_column_offset = tuple_schema_.get_attr_offset(read_column_id_);
@@ -219,9 +237,15 @@ private:
 
           sum += read_column_ret;
         }
+        timer.toc();
+        base_table_time += timer.time_us();
       }
 
     }
+
+    std::cout << "secondary index time: " << secondary_index_time << " us" << std::endl;
+    std::cout << "primary index time: " << primary_index_time << " us" << std::endl;
+    std::cout << "base table time: " << base_table_time << " us" << std::endl;
 
     return sum;    
   }
@@ -243,6 +267,12 @@ private:
 
     FastRandom rand_gen;
 
+    long long trs_tree_time = 0;
+    long long host_index_time = 0;
+    long long primary_index_time = 0;
+    long long base_table_time = 0;
+    TimeMeasurer timer;
+
     if (config_.index_pointer_type_ == LogicalPointerType) {
 
       for (size_t query_id = 0; query_id < config_.query_count_; ++query_id) {
@@ -256,18 +286,28 @@ private:
         std::vector<uint64_t> outliers;
 
         // find host key range
+        timer.tic();
         bool ret = correlation_index_->lookup(key, lhs_host_key, rhs_host_key, outliers);
+        timer.toc();
+        trs_tree_time += timer.time_us();
 
         if (ret == true) {
 
           std::vector<uint64_t> pkeys;
 
+          timer.tic();
           secondary_index_->range_lookup(lhs_host_key, rhs_host_key, pkeys);
+          timer.toc();
+          host_index_time += timer.time_us();
 
           std::vector<uint64_t> offsets;
 
+          timer.tic();
           primary_index_->lookup(pkeys, offsets);
+          timer.toc();
+          primary_index_time += timer.time_us();
 
+          timer.tic();
           for (auto offset : offsets) {
 
             char *value = data_table_->get_tuple(offset);
@@ -284,6 +324,8 @@ private:
               result_set.insert(offset);
             }
           }
+          timer.toc();
+          base_table_time += timer.time_us();
         } 
 
         // outliers are primary keys
@@ -291,8 +333,12 @@ private:
           
           std::vector<uint64_t> offsets;
 
+          timer.tic();
           primary_index_->lookup(outliers, offsets);
+          timer.toc();
+          primary_index_time += timer.time_us();
 
+          timer.tic();
           for (auto offset : offsets) {
 
             // check whether the outlier has already been in the result set.
@@ -308,6 +354,8 @@ private:
 
             result_set.insert(offset);
           }
+          timer.toc();
+          base_table_time += timer.time_us();
         }
 
       }
@@ -325,14 +373,21 @@ private:
         std::vector<uint64_t> outliers;
 
         // find host key range
+        timer.tic();
         bool ret = correlation_index_->lookup(key, lhs_host_key, rhs_host_key, outliers);
+        timer.toc();
+        trs_tree_time += timer.time_us();
 
         if (ret == true) {
   
           std::vector<uint64_t> offsets;
-  
+    
+          timer.tic();
           secondary_index_->range_lookup(lhs_host_key, rhs_host_key, offsets);
+          timer.toc();
+          host_index_time += timer.time_us();
 
+          timer.tic();
           for (auto offset : offsets) {
             char *value = data_table_->get_tuple(offset);
             
@@ -348,8 +403,11 @@ private:
               result_set.insert(offset);
             }
           }
+          timer.toc();
+          base_table_time += timer.time_us();
         }
 
+        timer.tic();
         // outliers are offsets
         for (auto offset : outliers) {
 
@@ -366,10 +424,17 @@ private:
 
           result_set.insert(offset);
         }
+        timer.toc();
+        base_table_time += timer.time_us();
 
       }
 
     }
+
+    std::cout << "trs tree time: " << trs_tree_time << " us" << std::endl;
+    std::cout << "host index time: " << host_index_time << " us" << std::endl;
+    std::cout << "primary index time: " << primary_index_time << " us" << std::endl;
+    std::cout << "base table time: " << base_table_time << " us" << std::endl;
 
     return sum;
   }
@@ -417,6 +482,11 @@ private:
 
     FastRandom rand_gen;
 
+    long long secondary_index_time = 0;
+    long long primary_index_time = 0;
+    long long base_table_time = 0;
+    TimeMeasurer timer;
+
     if (config_.index_pointer_type_ == LogicalPointerType) {
 
       for (size_t query_id = 0; query_id < config_.query_count_; ++query_id) {
@@ -429,12 +499,19 @@ private:
 
         std::vector<uint64_t> pkeys;
         
+        timer.tic();
         index->range_lookup(lhs_key, rhs_key, pkeys);
+        timer.toc();
+        secondary_index_time += timer.time_us();
 
         std::vector<uint64_t> offsets;
 
+        timer.tic();
         primary_index_->lookup(pkeys, offsets);
+        timer.toc();
+        primary_index_time += timer.time_us();
 
+        timer.tic();
         for (auto offset : offsets) {
           char *value = data_table_->get_tuple(offset);
           size_t read_column_offset = tuple_schema_.get_attr_offset(read_column_id_);
@@ -442,6 +519,8 @@ private:
           
           sum += read_column_ret;
         }
+        timer.toc();
+        base_table_time += timer.time_us();
       }
 
     } else {
@@ -456,8 +535,12 @@ private:
 
         std::vector<uint64_t> offsets;
         
+        timer.tic();
         index->range_lookup(lhs_key, rhs_key, offsets);
+        timer.toc();
+        secondary_index_time += timer.time_us();
         
+        timer.tic();
         for (auto offset : offsets) {
           char *value = data_table_->get_tuple(offset);
           size_t read_column_offset = tuple_schema_.get_attr_offset(read_column_id_);
@@ -465,9 +548,15 @@ private:
 
           sum += read_column_ret;
         }
+        timer.toc();
+        base_table_time += timer.time_us();
       }
 
     }
+
+    std::cout << "secondary index time: " << secondary_index_time << " us" << std::endl;
+    std::cout << "primary index time: " << primary_index_time << " us" << std::endl;
+    std::cout << "base table time: " << base_table_time << " us" << std::endl;
 
     return sum;    
   }
@@ -489,6 +578,12 @@ private:
 
     FastRandom rand_gen;
 
+    long long trs_tree_time = 0;
+    long long host_index_time = 0;
+    long long primary_index_time = 0;
+    long long base_table_time = 0;
+    TimeMeasurer timer;
+
     if (config_.index_pointer_type_ == LogicalPointerType) {
 
       for (size_t query_id = 0; query_id < config_.query_count_; ++query_id) {
@@ -505,18 +600,28 @@ private:
         std::vector<uint64_t> outliers;
 
         // find host key range
+        timer.tic();
         correlation_index_->range_lookup(lhs_key, rhs_key, host_key_ranges, outliers);
+        timer.toc();
+        trs_tree_time += timer.time_us();
 
         std::vector<uint64_t> pkeys;
 
+        timer.tic();
         for (auto host_key_range : host_key_ranges) {
           secondary_index_->range_lookup(host_key_range.first, host_key_range.second, pkeys); 
         }
+        timer.toc();
+        host_index_time += timer.time_us();
 
         std::vector<uint64_t> offsets;
 
+        timer.tic();
         primary_index_->lookup(pkeys, offsets);
+        timer.toc();
+        primary_index_time += timer.time_us();
 
+        timer.tic();
         for (auto offset : offsets) {
           char *value = data_table_->get_tuple(offset);
           
@@ -532,14 +637,20 @@ private:
             result_set.insert(offset);
           }
         }
+        timer.toc();
+        base_table_time += timer.time_us();
 
         // outliers are primary keys
         if (outliers.size() != 0) {
 
           offsets.clear();
 
+          timer.tic();
           primary_index_->lookup(outliers, offsets);
+          timer.toc();
+          primary_index_time += timer.time_us();
 
+          timer.tic();
           for (auto offset : offsets) {
 
             if (result_set.find(offset) != result_set.end()) {
@@ -554,6 +665,8 @@ private:
 
             result_set.insert(offset);
           }
+          timer.toc();
+          base_table_time += timer.time_us();
 
         }
 
@@ -575,14 +688,21 @@ private:
         std::vector<uint64_t> outliers;
 
         // find host key range
+        timer.tic();
         correlation_index_->range_lookup(lhs_key, rhs_key, host_key_ranges, outliers);
+        timer.toc();
+        trs_tree_time += timer.time_us();
 
         std::vector<uint64_t> offsets;
 
+        timer.tic();
         for (auto host_key_range : host_key_ranges) {
           secondary_index_->range_lookup(host_key_range.first, host_key_range.second, offsets);
         }
+        timer.toc();
+        host_index_time += timer.time_us();
 
+        timer.tic();
         for (auto offset : offsets) {
           char *value = data_table_->get_tuple(offset);
           
@@ -594,9 +714,14 @@ private:
             uint64_t read_column_ret = *(uint64_t*)(value + read_column_offset);
 
             sum += read_column_ret;
+
+            result_set.insert(offset);
           }
         }
+        timer.toc();
+        base_table_time += timer.time_us();
 
+        timer.tic();
         // outliers are offsets
         for (auto offset : outliers) {
 
@@ -612,10 +737,17 @@ private:
 
           result_set.insert(offset);
         }
+        timer.toc();
+        base_table_time += timer.time_us();
 
       }
 
     }
+
+    std::cout << "trs tree time: " << trs_tree_time << " us" << std::endl;
+    std::cout << "host index time: " << host_index_time << " us" << std::endl;
+    std::cout << "primary index time: " << primary_index_time << " us" << std::endl;
+    std::cout << "base table time: " << base_table_time << " us" << std::endl;
 
     return sum;
   }

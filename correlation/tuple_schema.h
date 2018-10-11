@@ -5,7 +5,7 @@
 #include <cstring>
 #include <iostream>
 
-const size_t MAX_ATTR_COUNT = 10;
+const size_t MAX_ATTR_COUNT = 20;
 
 struct TupleSchema {
 

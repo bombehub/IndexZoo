@@ -19,6 +19,8 @@ enum BenchmarkType {
   MicroBenchmarkType = 0,
   TaxiBenchmarkType,
   FlightBenchmarkType,
+  SensorBenchmarkType,
+  StockBenchmarkType,
 };
 
 enum DistributionType {

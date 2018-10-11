@@ -594,6 +594,8 @@ private:
             uint64_t read_column_ret = *(uint64_t*)(value + read_column_offset);
 
             sum += read_column_ret;
+
+            result_set.insert(offset);
           }
         }
 

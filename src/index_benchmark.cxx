@@ -25,18 +25,16 @@ void usage(FILE *out) {
           "   -h --help              :  print help message \n"
           // index structure
           "   -i --index             :  index type: \n"
-          "                              --  (0) static  - interpolation index (default) \n"
-          "                              --  (1) static  - binary index \n"
-          "                              --  (2) static  - kary index \n"
-          "                              --  (3) static  - fast index \n"
-          "                              -- (10) dynamic - singlethread - stx-btree index \n"
-          "                              -- (11) dynamic - singlethread - art-tree index \n"
-          "                              -- (12) dynamic - singlethread - skiplist index (unsupported) \n"
-          "                              -- (13) dynamic - singlethread - btree index (unsupported) \n"
-          "                              -- (20) dynamic - multithread  - libcuckoo index \n"
-          "                              -- (21) dynamic - multithread  - art-tree index \n"
-          "                              -- (22) dynamic - multithread  - bw-tree index \n"
-          "                              -- (23) dynamic - multithread  - masstree index \n"
+          "                              --  (0) dynamic - singlethread - stx-btree index (default)  \n"
+          "                              --  (1) dynamic - singlethread - art-tree index \n"
+          "                              -- (10) dynamic - multithread  - libcuckoo index \n"
+          "                              -- (11) dynamic - multithread  - art-tree index \n"
+          "                              -- (12) dynamic - multithread  - bw-tree index \n"
+          "                              -- (13) dynamic - multithread  - masstree index \n"
+          "                              -- (20) static  - interpolation index \n"
+          "                              -- (21) static  - binary index \n"
+          "                              -- (22) static  - kary index \n"
+          "                              -- (23) static  - fast index \n"
           "   -k --key_size          :  index key size (default: 8 bytes) \n"
           "   -S --index_param_1     :  1st index parameter \n"
           "   -T --index_param_2     :  2nd index parameter \n"
@@ -94,7 +92,7 @@ enum class ReadType {
 
 struct Config {
   // index structure
-  IndexType index_type_ = IndexType::S_Interpolation;
+  IndexType index_type_ = IndexType::D_ST_StxBtree;
   int key_size_ = 8; // unit: bytes
   int index_param_1_ = INVALID_INDEX_PARAM;
   int index_param_2_ = INVALID_INDEX_PARAM;
@@ -111,7 +109,6 @@ struct Config {
   double key_stddev_ = INVALID_KEY_STDDEV;
   bool record_ = false;
   bool verbose_ = false;
-  uint64_t generated_read_key_count_ = 100 * 1000 * 1000; // 100 millions
 
   void print() {
     std::cout << "=====     INDEX STRUCTURE    =====" << std::endl;
@@ -212,8 +209,6 @@ void parse_args(int argc, char* argv[], Config &config) {
   validate_index_params(config.index_type_, config.index_param_1_, config.index_param_2_);
 
   validate_key_generator_params(config.distribution_type_, config.key_bound_, config.key_stddev_);
-
-  config.generated_read_key_count_ = config.generated_read_key_count_ * config.read_ratio_;
   
   config.print();
 
@@ -223,7 +218,7 @@ bool is_running = false;
 uint64_t *operation_counts = nullptr;
 
 template<typename KeyT, typename ValueT>
-void run_thread(const size_t &thread_id, const Config &config, const KeyT *read_keys, DataTable<KeyT, ValueT> *data_table, BaseIndex<KeyT, ValueT> *data_index) {
+void run_thread(const size_t &thread_id, const Config &config, const KeyT *query_keys, DataTable<KeyT, ValueT> *data_table, BaseIndex<KeyT, ValueT> *data_index) {
 
   pin_to_core(thread_id);
 
@@ -244,7 +239,7 @@ void run_thread(const size_t &thread_id, const Config &config, const KeyT *read_
     double next_rand = rand_gen.next_uniform();
 
     if (next_rand < config.read_ratio_) {
-      KeyT key = read_keys[operation_count % config.generated_read_key_count_];
+      KeyT key = query_keys[rand_gen.next<uint64_t>() % config.key_count_];
 
       std::vector<Uint64> offsets;
 
@@ -303,6 +298,8 @@ void run_workload(const Config &config) {
     init_keys[i] = key;
   }
   data_index->reorganize();
+
+  double query_key_size_mb = config.key_count_ * sizeof(KeyT) * 1.0 / 1024 / 1024;
   //=================================
 
   //=================================
@@ -321,25 +318,6 @@ void run_workload(const Config &config) {
     // return;
   }
   //=================================
-
-  //=================================
-  // prepare query keys
-  //=================================
-  KeyT** read_keys = new KeyT*[config.thread_count_];
-  
-  // generate keys for each thread
-  for (size_t i = 0; i < config.thread_count_; ++i) {
-
-    read_keys[i] = new KeyT[config.generated_read_key_count_];
-
-    FastRandom rand_gen(i);
-    
-    for (size_t j = 0; j < config.generated_read_key_count_; ++j) {
-      read_keys[i][j] = init_keys[rand_gen.next<uint64_t>() % config.key_count_];
-    }
-  }
-
-  double query_key_size_mb = (config.key_count_ + config.generated_read_key_count_) * sizeof(KeyT) / 1024 / 1024;
 
   //=================================
 
@@ -367,7 +345,7 @@ void run_workload(const Config &config) {
   // PAPIProfiler::start_measure_cache_miss_rate();
   
   for (uint64_t thread_id = 0; thread_id < config.thread_count_; ++thread_id) {
-    worker_threads.push_back(std::move(std::thread(run_thread<KeyT, ValueT>, thread_id, std::ref(config), read_keys[thread_id], data_table.get(), data_index.get())));
+    worker_threads.push_back(std::move(std::thread(run_thread<KeyT, ValueT>, thread_id, std::ref(config), init_keys, data_table.get(), data_index.get())));
   }
 
   std::cout << "        TIME       THROUGHPUT   RAM (tot.)   RAM (tab.)" << std::endl;

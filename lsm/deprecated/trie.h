@@ -66,14 +66,6 @@ public:
     return count;
   }
 
-  void get_root_prefix() {
-
-  }
-
-  // size_t get_root_element_count() {
-  //   return art_root_element_count(&tree_);
-  // }
-
 
 private:
   art_tree tree_;

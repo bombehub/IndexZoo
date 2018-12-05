@@ -2,10 +2,10 @@ PROJECT (IndexZoo)
 
 FILE (GLOB_RECURSE SRC_LIST "*.cpp")
 
-ADD_EXECUTABLE (lsm_test lsm_test.cxx ${SRC_LIST})
+ADD_EXECUTABLE (lsm_trie_test lsm_trie_test.cxx ${SRC_LIST})
 
-TARGET_LINK_LIBRARIES (lsm_test indexzoo)
-TARGET_LINK_LIBRARIES (lsm_test pthread)
+TARGET_LINK_LIBRARIES (lsm_trie_test indexzoo)
+TARGET_LINK_LIBRARIES (lsm_trie_test pthread)
 
 
 ADD_DEFINITIONS(-DWORDS_BIGENDIAN_SET=1)
@@ -24,6 +24,7 @@ ADD_DEFINITIONS(-DHAVE___BUILTIN_CLZ=1)
 ADD_DEFINITIONS(-DHAVE___BUILTIN_CLZL=1)
 
 
-INSTALL (TARGETS lsm_test 
+INSTALL (TARGETS lsm_trie_test 
     RUNTIME DESTINATION bin
     )
+

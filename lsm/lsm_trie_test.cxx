@@ -62,4 +62,5 @@ int main(int argc, char* argv[]) {
   uint8_t d1 = (uint8_t)c1;
 
   std::cout << (d0 < d1) << std::endl;
+  std::cout << unsigned(d0) << " " << unsigned(d1) << std::endl;
 }

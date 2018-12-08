@@ -42,16 +42,32 @@ void test(const size_t key_count) {
     ++ts_counter;
   }
 
-  LSMTrie storage;
-  for (auto kv : kv_logs) {
+  LSMTrie storage(key_size, payload_size);
+  for (auto &kv : kv_logs) {
     storage.insert(kv.key_, kv.payload_, kv.timestamp_);
   }
 
+  for (auto &kv : kv_logs) {
+    std::vector<GenericKey> ret_payloads;
+    storage.lookup(kv.key_, kv.timestamp_, ret_payloads);
+    assert(ret_payloads.size() == 1);
+  }
+
+  storage.persist();
+
+  std::cout << "imm size = " << storage.get_imm_size() << std::endl;
+
+  storage.clear();
+
+  std::cout << "imm size = " << storage.get_imm_size() << std::endl;
+
+  storage.load();
+
+  std::cout << "imm size = " << storage.get_imm_size() << std::endl;
+
 }
 
-int main(int argc, char* argv[]) {
-  // size_t key_count = 1000000;
-  // test(key_count);
+void mytest() {
 
   char c0 = 0xff;
   char c1 = 0x7f;
@@ -63,4 +79,9 @@ int main(int argc, char* argv[]) {
 
   std::cout << (d0 < d1) << std::endl;
   std::cout << unsigned(d0) << " " << unsigned(d1) << std::endl;
+}
+
+int main(int argc, char* argv[]) {
+  size_t key_count = 1000;
+  test(key_count);
 }

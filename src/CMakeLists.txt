@@ -3,7 +3,8 @@ PROJECT (IndexZoo)
 FILE (GLOB_RECURSE SRC_LIST "*.cpp" "*.cc" "*.c")
 
 ADD_LIBRARY (indexzoo SHARED ${SRC_LIST})
-
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR})
+find_package(Jemalloc)
 ADD_EXECUTABLE (index_benchmark index_benchmark.cxx)
 TARGET_LINK_LIBRARIES (index_benchmark indexzoo)
 TARGET_LINK_LIBRARIES (index_benchmark jemalloc pthread)

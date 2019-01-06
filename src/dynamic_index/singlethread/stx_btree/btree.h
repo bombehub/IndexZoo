@@ -1329,7 +1329,7 @@ public:
     template <class InputIterator>
     inline btree(InputIterator first, InputIterator last,
                  const allocator_type& alloc = allocator_type())
-        : m_root(NULL), m_headleaf(NULL), m_tailleaf(NULL), m_allocator(alloc)
+            : m_root(NULL), m_headleaf(NULL), m_tailleaf(NULL), m_allocator(alloc)
     {
         insert(first, last);
     }

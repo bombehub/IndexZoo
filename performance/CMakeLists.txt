@@ -7,7 +7,6 @@ ADD_EXECUTABLE (index_perf_test index_perf_test.cxx ${SRC_LIST})
 TARGET_LINK_LIBRARIES (index_perf_test indexzoo)
 TARGET_LINK_LIBRARIES (index_perf_test pthread)
 
-
 ADD_EXECUTABLE (generic_index_perf_test generic_index_perf_test.cxx ${SRC_LIST})
 
 TARGET_LINK_LIBRARIES (generic_index_perf_test indexzoo)

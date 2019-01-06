@@ -170,8 +170,7 @@ static art_node** find_child(art_node *n, unsigned char c) {
             #ifdef __amd64__
                 // Compare the key to all 16 stored keys
                 __m128i cmp;
-                cmp = _mm_cmpeq_epi8(_mm_set1_epi8(c),
-                        _mm_loadu_si128((__m128i*)p.p2->keys));
+                cmp = _mm_cmpeq_epi8(_mm_set1_epi8(c), _mm_loadu_si128((__m128i*)p.p2->keys));
 
                 // Use a mask to ignore children that don't exist
                 mask = (1 << n->num_children) - 1;

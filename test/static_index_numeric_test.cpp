@@ -37,7 +37,6 @@ void test_static_index_numeric_unique_key_find(const IndexType index_type, const
     validation_set.insert(
       std::pair<KeyT, std::pair<Uint64, ValueT>>(
         key, std::pair<Uint64, ValueT>(offset.raw_data(), value)));
-
   }
 
   // reorganize data

@@ -14,7 +14,7 @@ typedef uint64_t Uint64;
 
 static double get_memory_mb() {
 // #if defined(NDEBUG)
-  uint64_t epoch = 1;
+/*  uint64_t epoch = 1;
   size_t sz = sizeof(epoch);
   mallctl("epoch", &epoch, &sz, &epoch, sz);
 
@@ -22,7 +22,7 @@ static double get_memory_mb() {
   sz = sizeof(size_t);
   if (mallctl("stats.allocated", &allocated, &sz, NULL, 0) == 0) {
     return allocated * 1.0 / 1024 / 1024;
-  }
+  }*/
   return -1;
 // #else
 //   return -1;
@@ -31,7 +31,7 @@ static double get_memory_mb() {
 
 static double get_memory_gb() {
 // #if defined(NDEBUG)
-  uint64_t epoch = 1;
+/*  uint64_t epoch = 1;
   size_t sz = sizeof(epoch);
   mallctl("epoch", &epoch, &sz, &epoch, sz);
 
@@ -39,7 +39,7 @@ static double get_memory_gb() {
   sz = sizeof(size_t);
   if (mallctl("stats.allocated", &allocated, &sz, NULL, 0) == 0) {
     return allocated * 1.0 / 1024 / 1024 / 1024;
-  }
+  }*/
   return -1;
 // #else
 //   return -1;
